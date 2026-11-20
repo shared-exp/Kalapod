@@ -1,0 +1,180 @@
+package ir.kalapod.app.ui.purchase
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.kalapod.app.core.format.InputParser
+import ir.kalapod.app.core.format.PersianFormat
+import ir.kalapod.app.ui.cart.CartLineCard
+import ir.kalapod.app.ui.cart.PartyField
+import ir.kalapod.app.ui.cart.ProductPickerSheet
+import ir.kalapod.app.ui.cart.SummaryRow
+
+@Composable
+fun PurchaseScreen(onCreateProduct: () -> Unit, vm: PurchaseViewModel = hiltViewModel()) {
+    val s by vm.state.collectAsStateWithLifecycle()
+    val pickerProducts by vm.pickerProducts.collectAsStateWithLifecycle()
+    val pickerQuery by vm.pickerQuery.collectAsStateWithLifecycle()
+    val suppliers by vm.suppliers.collectAsStateWithLifecycle()
+    var showPicker by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val cur = s.currency
+    val totals = vm.totals(s)
+
+    LaunchedEffect(s.lastPosted) {
+        s.lastPosted?.let {
+            snackbar.showSnackbar("خرید ثبت شد — فاکتور ${PersianFormat.digits(it.invoiceNumber)}")
+            vm.consumePosted()
+        }
+    }
+
+    Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
+        Text("ثبت خرید", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp, 12.dp))
+        LazyColumn(
+            Modifier.weight(1f),
+            contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            itemsIndexed(s.lines, key = { _, l -> l.productId }) { i, line ->
+                CartLineCard(line, cur, onChange = { vm.updateLine(i, it) }, onRemove = { vm.removeLine(i) })
+            }
+            item {
+                FilledTonalButton(
+                    onClick = { vm.pickerQuery.value = ""; showPicker = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                ) {
+                    Icon(Icons.Outlined.Add, null)
+                    Text(if (s.lines.isEmpty()) "افزودن کالا به فاکتور خرید" else "افزودن کالای دیگر")
+                }
+            }
+            if (s.lines.isNotEmpty()) {
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MoneyField(s.discountText, { v -> vm.edit { it.copy(discountText = v) } }, "تخفیف (${cur.label})", Modifier.weight(1f))
+                        MoneyField(s.extraText, { v -> vm.edit { it.copy(extraText = v) } }, "هزینه جانبی (${cur.label})", Modifier.weight(1f))
+                    }
+                }
+                item {
+                    PartyField(
+                        "تأمین‌کننده", s.supplierText, { v -> vm.edit { it.copy(supplierText = v) } },
+                        suppliers, s.supplierId, { id -> vm.edit { it.copy(supplierId = id) } },
+                    )
+                }
+                item {
+                    Text("نحوه پرداخت", style = MaterialTheme.typography.titleSmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Settlement.entries.forEach { opt ->
+                            FilterChip(
+                                s.settlement == opt, onClick = { vm.edit { it.copy(settlement = opt) } },
+                                label = { Text(when (opt) { Settlement.CASH -> "نقد"; Settlement.CARD -> "کارت"; Settlement.CREDIT -> "نسیه" }) },
+                            )
+                        }
+                    }
+                    if (s.settlement == Settlement.CREDIT) {
+                        MoneyField(
+                            s.paidNowText, { v -> vm.edit { it.copy(paidNowText = v) } },
+                            "مبلغ پرداخت‌شده الان (${cur.label})", Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+
+        if (s.lines.isNotEmpty()) {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 2.dp) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SummaryRow("جمع کل", totals?.let { PersianFormat.money(it.total, cur) } ?: "—", strong = true)
+                    s.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    Button(
+                        onClick = { vm.check()?.let(vm::showError) ?: run { confirm = true } },
+                        enabled = !s.posting,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = MaterialTheme.shapes.large,
+                    ) { Text("ثبت خرید", style = MaterialTheme.typography.titleMedium) }
+                }
+            }
+        }
+        SnackbarHost(snackbar)
+    }
+
+    if (showPicker) {
+        ProductPickerSheet(
+            products = pickerProducts, query = pickerQuery, onQuery = { vm.pickerQuery.value = it },
+            currency = cur, showPurchasePrice = true,
+            onPick = { vm.add(it); showPicker = false },
+            onCreateNew = { showPicker = false; onCreateProduct() },
+            onDismiss = { showPicker = false },
+        )
+    }
+
+    if (confirm && totals != null) {
+        val paidNow = if (s.settlement == Settlement.CREDIT) InputParser.money(s.paidNowText.ifBlank { "0" }, cur) ?: 0 else totals.total
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("تأیید خرید") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    s.lines.forEach { l ->
+                        SummaryRow(
+                            "${l.name} × ${PersianFormat.quantity(l.quantityMilli() ?: 0)}",
+                            l.lineTotal(cur)?.let { PersianFormat.money(it, cur) } ?: "",
+                        )
+                    }
+                    if (totals.discount > 0) SummaryRow("تخفیف", "−" + PersianFormat.money(totals.discount, cur))
+                    if (totals.extraCost > 0) SummaryRow("هزینه جانبی", PersianFormat.money(totals.extraCost, cur))
+                    SummaryRow("جمع کل", PersianFormat.money(totals.total, cur), strong = true)
+                    SummaryRow("پرداخت‌شده", PersianFormat.money(paidNow, cur))
+                    if (totals.total - paidNow > 0) {
+                        SummaryRow("بدهی به تأمین‌کننده", PersianFormat.money(totals.total - paidNow, cur))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { confirm = false; vm.post() }) { Text("ثبت نهایی") } },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("اصلاح") } },
+        )
+    }
+}
+
+@Composable
+private fun MoneyField(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier) {
+    OutlinedTextField(
+        value, onChange, label = { Text(label) }, singleLine = true, modifier = modifier,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+    )
+}
