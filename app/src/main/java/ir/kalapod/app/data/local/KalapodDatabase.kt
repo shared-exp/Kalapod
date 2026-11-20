@@ -48,6 +48,7 @@ abstract class KalapodDatabase : RoomDatabase() {
     abstract fun paymentDao(): PaymentDao
     abstract fun stockAlertDao(): StockAlertDao
     abstract fun settingDao(): SettingDao
+    abstract fun balanceDao(): ir.kalapod.app.data.local.dao.BalanceDao
 
     companion object { const val NAME = "kalapod.db" }
 }

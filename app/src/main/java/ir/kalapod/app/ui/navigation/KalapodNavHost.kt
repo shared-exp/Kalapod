@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddShoppingCart
-import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.PointOfSale
@@ -29,6 +29,10 @@ import androidx.navigation.compose.rememberNavController
 import ir.kalapod.app.ui.dashboard.DashboardScreen
 import ir.kalapod.app.ui.documents.DocumentDetailScreen
 import ir.kalapod.app.ui.documents.DocumentsScreen
+import ir.kalapod.app.ui.more.MoreScreen
+import ir.kalapod.app.ui.more.SettingsScreen
+import ir.kalapod.app.ui.parties.PartiesScreen
+import ir.kalapod.app.ui.parties.PartyDetailScreen
 import ir.kalapod.app.ui.products.ProductEditScreen
 import ir.kalapod.app.ui.purchase.PurchaseScreen
 import ir.kalapod.app.ui.sale.SaleScreen
@@ -41,7 +45,7 @@ enum class TopLevel(val route: String, val label: String, val icon: ImageVector)
     PURCHASE("purchase", "خرید", Icons.Outlined.AddShoppingCart),
     SALE("sale", "فروش", Icons.Outlined.PointOfSale),
     INVENTORY("inventory", "انبار", Icons.Outlined.Inventory2),
-    REPORTS("reports", "فاکتورها", Icons.Outlined.BarChart),
+    REPORTS("more", "بیشتر", Icons.Outlined.MoreHoriz),
 }
 
 @Composable
@@ -112,8 +116,26 @@ fun KalapodNavHost() {
                     navArgument("name") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) { ProductEditScreen(onDone = { nav.popBackStack() }, onOpenDocument = { nav.navigate("document/$it") }) }
-            // Reports (step 3.3) will live here; until then the tab lists documents.
-            composable(TopLevel.REPORTS.route) { DocumentsScreen(onOpen = { nav.navigate("document/$it") }) }
+            composable(TopLevel.REPORTS.route) {
+                MoreScreen(
+                    onDocuments = { nav.navigate("documents") },
+                    onParties = { nav.navigate("parties") },
+                    onSettings = { nav.navigate("settings") },
+                )
+            }
+            composable("documents") { DocumentsScreen(onOpen = { nav.navigate("document/$it") }) }
+            composable("parties") {
+                PartiesScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpen = { kind, id -> nav.navigate("party/${kind.name}/$id") },
+                    onAdd = { kind -> nav.navigate("party/${kind.name}/0") },
+                )
+            }
+            composable(
+                "party/{kind}/{id}",
+                arguments = listOf(navArgument("kind") { type = NavType.StringType }, navArgument("id") { type = NavType.LongType }),
+            ) { PartyDetailScreen(onBack = { nav.popBackStack() }, onOpenDocument = { nav.navigate("document/$it") }) }
+            composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable("document/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) {
                 DocumentDetailScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("document/$it") })
             }

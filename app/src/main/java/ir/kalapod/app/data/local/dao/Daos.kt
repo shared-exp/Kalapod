@@ -223,3 +223,77 @@ interface SettingDao {
     @Query("SELECT value FROM settings WHERE `key` = :key") suspend fun get(key: String): String?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(s: SettingEntity)
 }
+
+/** A customer or supplier with its running balance (rial). Positive = they owe us / we owe them. */
+data class PartyBalance(val id: Long, val name: String, val phone: String?, val balance: Long)
+
+/** One line in a party's account history. */
+data class PartyEntry(
+    val kind: String,          // "DOC" or "PAY"
+    val refId: Long,           // transaction id or payment id
+    val label: String,         // transaction type or payment direction
+    val method: String?,
+    val amount: Long,
+    val occurredAt: Long,
+    val reversed: Boolean,
+    val invoiceNumber: String?,
+)
+
+@Dao
+interface BalanceDao {
+    /*
+     * Customer balance = sales − sale returns − money received + money refunded.
+     * Only live documents count (POSTED and not a reversal record); payment mirrors from reversals
+     * are included so they cancel the originals.
+     */
+    @Query(
+        "SELECT c.id, c.name, c.phone, " +
+            "COALESCE((SELECT SUM(CASE t.type WHEN 'SALE' THEN t.total WHEN 'SALE_RETURN' THEN -t.total ELSE 0 END) " +
+            "  FROM transactions t WHERE t.customerId = c.id AND t.status = 'POSTED' AND t.reversesId IS NULL), 0) - " +
+            "COALESCE((SELECT SUM(CASE p.direction WHEN 'IN' THEN p.amount ELSE -p.amount END) " +
+            "  FROM payments p WHERE p.customerId = c.id), 0) AS balance " +
+            "FROM customers c ORDER BY balance DESC, c.name",
+    )
+    fun observeCustomerBalances(): Flow<List<PartyBalance>>
+
+    /** Supplier balance = purchases − purchase returns − money paid + money refunded to us. */
+    @Query(
+        "SELECT s.id, s.name, s.phone, " +
+            "COALESCE((SELECT SUM(CASE t.type WHEN 'PURCHASE' THEN t.total WHEN 'PURCHASE_RETURN' THEN -t.total ELSE 0 END) " +
+            "  FROM transactions t WHERE t.supplierId = s.id AND t.status = 'POSTED' AND t.reversesId IS NULL), 0) - " +
+            "COALESCE((SELECT SUM(CASE p.direction WHEN 'OUT' THEN p.amount ELSE -p.amount END) " +
+            "  FROM payments p WHERE p.supplierId = s.id), 0) AS balance " +
+            "FROM suppliers s ORDER BY balance DESC, s.name",
+    )
+    fun observeSupplierBalances(): Flow<List<PartyBalance>>
+
+    @Query(
+        "SELECT 'DOC' AS kind, t.id AS refId, t.type AS label, NULL AS method, t.total AS amount, t.occurredAt, " +
+            "(t.status = 'REVERSED') AS reversed, inv.number AS invoiceNumber " +
+            "FROM transactions t LEFT JOIN invoices inv ON inv.transactionId = t.id " +
+            "WHERE t.customerId = :id AND t.reversesId IS NULL " +
+            "UNION ALL SELECT 'PAY', p.id, p.direction, p.method, p.amount, p.occurredAt, " +
+            "(p.reversesPaymentId IS NOT NULL OR EXISTS(SELECT 1 FROM payments r WHERE r.reversesPaymentId = p.id)), NULL " +
+            "FROM payments p WHERE p.customerId = :id AND p.transactionId IS NULL " +
+            "ORDER BY occurredAt DESC",
+    )
+    fun observeCustomerHistory(id: Long): Flow<List<PartyEntry>>
+
+    @Query(
+        "SELECT 'DOC' AS kind, t.id AS refId, t.type AS label, NULL AS method, t.total AS amount, t.occurredAt, " +
+            "(t.status = 'REVERSED') AS reversed, inv.number AS invoiceNumber " +
+            "FROM transactions t LEFT JOIN invoices inv ON inv.transactionId = t.id " +
+            "WHERE t.supplierId = :id AND t.reversesId IS NULL " +
+            "UNION ALL SELECT 'PAY', p.id, p.direction, p.method, p.amount, p.occurredAt, " +
+            "(p.reversesPaymentId IS NOT NULL OR EXISTS(SELECT 1 FROM payments r WHERE r.reversesPaymentId = p.id)), NULL " +
+            "FROM payments p WHERE p.supplierId = :id AND p.transactionId IS NULL " +
+            "ORDER BY occurredAt DESC",
+    )
+    fun observeSupplierHistory(id: Long): Flow<List<PartyEntry>>
+
+    @Query("SELECT * FROM payments WHERE id = :id") suspend fun payment(id: Long): PaymentEntity?
+    @Query("SELECT COUNT(*) FROM payments WHERE reversesPaymentId = :id") suspend fun reversalCount(id: Long): Int
+    @Query("SELECT * FROM payments WHERE clientUuid = :uuid") suspend fun paymentByUuid(uuid: String): PaymentEntity?
+    @Query("SELECT * FROM customers WHERE id = :id") suspend fun customer(id: Long): CustomerEntity?
+    @Query("SELECT * FROM suppliers WHERE id = :id") suspend fun supplier(id: Long): SupplierEntity?
+}
