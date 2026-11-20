@@ -2,6 +2,7 @@ package ir.kalapod.app.ui.navigation
 
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddShoppingCart
@@ -27,6 +28,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ir.kalapod.app.ui.dashboard.DashboardScreen
 import ir.kalapod.app.ui.common.UnderConstruction
+import ir.kalapod.app.ui.products.ProductEditScreen
+import ir.kalapod.app.ui.products.ProductListScreen
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 
 enum class TopLevel(val route: String, val label: String, val icon: ImageVector) {
     HOME("home", "خانه", Icons.Outlined.Home),
@@ -50,7 +55,11 @@ fun KalapodNavHost() {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        // Each screen handles its own status-bar inset; avoid double top padding.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
+            // Only on top-level tabs; detail/edit screens get the full height.
+            if (TopLevel.entries.none { it.route == current?.route }) return@Scaffold
             NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 TopLevel.entries.forEach { tab ->
                     NavigationBarItem(
@@ -80,7 +89,19 @@ fun KalapodNavHost() {
             // Screens below are implemented in roadmap steps 1.6–1.8 and 3.3.
             composable(TopLevel.PURCHASE.route) { UnderConstruction("ثبت خرید", "گام ۱.۷") }
             composable(TopLevel.SALE.route) { UnderConstruction("ثبت فروش", "گام ۱.۸") }
-            composable(TopLevel.INVENTORY.route) { UnderConstruction("انبار و کالاها", "گام ۱.۶") }
+            composable(TopLevel.INVENTORY.route) {
+                ProductListScreen(
+                    onAdd = { nav.navigate("product/edit") },
+                    onOpen = { id -> nav.navigate("product/edit?id=$id") },
+                )
+            }
+            composable(
+                "product/edit?id={id}&barcode={barcode}",
+                arguments = listOf(
+                    navArgument("id") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("barcode") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { ProductEditScreen(onDone = { nav.popBackStack() }) }
             composable(TopLevel.REPORTS.route) { UnderConstruction("گزارش‌ها و تنظیمات", "گام ۳.۳") }
         }
     }

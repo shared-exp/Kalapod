@@ -43,8 +43,24 @@ interface ProductDao {
     @Query("SELECT p.* FROM products p JOIN product_barcodes b ON b.productId = p.id WHERE b.code = :code")
     suspend fun findByBarcode(code: String): ProductEntity?
 
-    @Query("SELECT * FROM products WHERE isArchived = 0 AND stockMilli <= minStockMilli ORDER BY name")
+    @Query(
+        "SELECT * FROM products WHERE isArchived = 0 AND " +
+            "((minStockMilli > 0 AND stockMilli <= minStockMilli) OR stockMilli < 0) ORDER BY stockMilli, name",
+    )
     fun observeLowStock(): Flow<List<ProductEntity>>
+
+    /** List screen query. [categoryId] = null means all; [lowOnly] restricts to low/negative stock. */
+    @Query(
+        "SELECT * FROM products WHERE isArchived = 0 " +
+            "AND (:q = '' OR name LIKE '%' || :q || '%' OR id IN (SELECT productId FROM product_barcodes WHERE code = :q)) " +
+            "AND (:categoryId IS NULL OR categoryId = :categoryId) " +
+            "AND (:lowOnly = 0 OR (minStockMilli > 0 AND stockMilli <= minStockMilli) OR stockMilli < 0) " +
+            "ORDER BY name",
+    )
+    fun observeFiltered(q: String, categoryId: Long?, lowOnly: Boolean): Flow<List<ProductEntity>>
+
+    @Query("SELECT COUNT(*) FROM products WHERE isArchived = 0 AND name = :name AND id != :exceptId")
+    suspend fun countByName(name: String, exceptId: Long): Int
 
     @Query("SELECT COALESCE(SUM(stockValue), 0) FROM products WHERE isArchived = 0")
     fun observeStockValue(): Flow<Long>
@@ -60,6 +76,8 @@ interface ProductDao {
 interface BarcodeDao {
     @Query("SELECT * FROM product_barcodes WHERE productId = :productId")
     suspend fun forProduct(productId: Long): List<ProductBarcodeEntity>
+    @Query("SELECT * FROM product_barcodes WHERE code = :code") suspend fun byCode(code: String): ProductBarcodeEntity?
+    @Query("DELETE FROM product_barcodes WHERE productId = :productId") suspend fun deleteForProduct(productId: Long)
     @Insert suspend fun insert(b: ProductBarcodeEntity): Long
     @Delete suspend fun delete(b: ProductBarcodeEntity)
 }
