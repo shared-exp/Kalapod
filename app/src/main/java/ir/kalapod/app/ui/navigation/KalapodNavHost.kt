@@ -30,6 +30,7 @@ import ir.kalapod.app.ui.dashboard.DashboardScreen
 import ir.kalapod.app.ui.common.UnderConstruction
 import ir.kalapod.app.ui.products.ProductEditScreen
 import ir.kalapod.app.ui.purchase.PurchaseScreen
+import ir.kalapod.app.ui.sale.SaleScreen
 import ir.kalapod.app.ui.products.ProductListScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -89,7 +90,7 @@ fun KalapodNavHost() {
             }
             // Screens below are implemented in roadmap steps 1.6–1.8 and 3.3.
             composable(TopLevel.PURCHASE.route) { PurchaseScreen(onCreateProduct = { nav.navigate("product/edit") }) }
-            composable(TopLevel.SALE.route) { UnderConstruction("ثبت فروش", "گام ۱.۸") }
+            composable(TopLevel.SALE.route) { SaleScreen(onCreateProduct = { nav.navigate("product/edit") }) }
             composable(TopLevel.INVENTORY.route) {
                 ProductListScreen(
                     onAdd = { nav.navigate("product/edit") },

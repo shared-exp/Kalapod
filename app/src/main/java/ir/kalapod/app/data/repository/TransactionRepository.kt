@@ -3,6 +3,7 @@ package ir.kalapod.app.data.repository
 import androidx.room.withTransaction
 import ir.kalapod.app.core.jalali.JalaliDate
 import ir.kalapod.app.data.local.KalapodDatabase
+import ir.kalapod.app.data.local.entity.CustomerEntity
 import ir.kalapod.app.data.local.entity.InvoiceEntity
 import ir.kalapod.app.data.local.entity.MovementReason
 import ir.kalapod.app.data.local.entity.PaymentDirection
@@ -40,10 +41,28 @@ data class PurchaseDraft(
     val occurredAt: Long = System.currentTimeMillis(),
 )
 
+data class SaleDraft(
+    val clientUuid: String,
+    val lines: List<LineInput>,
+    val discount: Long = 0,
+    val customer: PartyRef = PartyRef.None,
+    /** Amount received now (cash or card). The rest becomes the customer's debt (نسیه). */
+    val receivedAmount: Long,
+    val receivedMethod: PaymentMethod = PaymentMethod.CASH,
+    /** True only after the user explicitly confirmed selling more than the recorded stock. */
+    val allowOversell: Boolean = false,
+    val note: String? = null,
+    val occurredAt: Long = System.currentTimeMillis(),
+)
+
+data class Shortage(val productId: Long, val name: String, val requestedMilli: Long, val availableMilli: Long)
+
 sealed interface PostResult {
     data class Posted(val transactionId: Long, val invoiceNumber: String, val total: Long) : PostResult
     data class AlreadyPosted(val transactionId: Long) : PostResult
     data class Invalid(val message: String) : PostResult
+    /** Nothing was written; ask the user, then retry with allowOversell = true. */
+    data class InsufficientStock(val shortages: List<Shortage>) : PostResult
 }
 
 @Singleton
@@ -98,6 +117,68 @@ class TransactionRepository @Inject constructor(
             val number = issueInvoice(txId, "P", d.occurredAt)
             PostResult.Posted(txId, number, totals.total)
         }
+    }
+
+    suspend fun postSale(d: SaleDraft): PostResult {
+        DocumentCalculator.validate(d.lines, d.discount, 0)?.let { return PostResult.Invalid(it.message) }
+        require(d.receivedMethod != PaymentMethod.CREDIT) { "receivedMethod must be CASH or CARD" }
+        val totals = DocumentCalculator.compute(d.lines, d.discount, 0)
+        if (d.receivedAmount < 0 || d.receivedAmount > totals.total) return PostResult.Invalid("مبلغ دریافتی نامعتبر است.")
+        if (totals.total - d.receivedAmount > 0 && d.customer == PartyRef.None) {
+            return PostResult.Invalid("برای فروش نسیه، نام مشتری را وارد کنید.")
+        }
+
+        return db.withTransaction {
+            db.transactionDao().byUuid(d.clientUuid)?.let { return@withTransaction PostResult.AlreadyPosted(it.id) }
+
+            if (!d.allowOversell) {
+                val shortages = d.lines.groupBy { it.productId }.mapNotNull { (pid, ls) ->
+                    val p = db.productDao().get(pid) ?: return@withTransaction PostResult.Invalid("کالا پیدا نشد.")
+                    val want = ls.sumOf { it.quantityMilli }
+                    if (want > p.stockMilli) Shortage(pid, p.name, want, p.stockMilli) else null
+                }
+                if (shortages.isNotEmpty()) return@withTransaction PostResult.InsufficientStock(shortages)
+            }
+
+            val now = System.currentTimeMillis()
+            val customerId = resolveCustomer(d.customer, now)
+            val txId = db.transactionDao().insert(
+                TransactionEntity(
+                    clientUuid = d.clientUuid, type = TransactionType.SALE, occurredAt = d.occurredAt,
+                    customerId = customerId, subtotal = totals.subtotal, discount = d.discount,
+                    total = totals.total, note = d.note, createdAt = now,
+                ),
+            )
+            // Issue stock first so each line records its cost at the moving average.
+            val costs = d.lines.map { l ->
+                -ledger.issue(l.productId, l.quantityMilli, MovementReason.SALE, txId, d.occurredAt).valueDelta
+            }
+            db.transactionDao().insertItems(
+                d.lines.mapIndexed { i, l ->
+                    TransactionItemEntity(
+                        transactionId = txId, productId = l.productId, quantityMilli = l.quantityMilli,
+                        unitPrice = l.unitPrice, lineTotal = totals.lineTotals[i], costTotal = costs[i],
+                    )
+                },
+            )
+            if (d.receivedAmount > 0) {
+                db.paymentDao().insert(
+                    PaymentEntity(
+                        clientUuid = "${d.clientUuid}-pay", transactionId = txId, customerId = customerId,
+                        direction = PaymentDirection.IN, method = d.receivedMethod, amount = d.receivedAmount,
+                        occurredAt = d.occurredAt,
+                    ),
+                )
+            }
+            val number = issueInvoice(txId, "S", d.occurredAt)
+            PostResult.Posted(txId, number, totals.total)
+        }
+    }
+
+    private suspend fun resolveCustomer(ref: PartyRef, now: Long): Long? = when (ref) {
+        PartyRef.None -> null
+        is PartyRef.Existing -> ref.id
+        is PartyRef.New -> db.partyDao().insertCustomer(CustomerEntity(name = ref.name.trim(), phone = ref.phone, createdAt = now))
     }
 
     private suspend fun resolveSupplier(ref: PartyRef, now: Long): Long? = when (ref) {

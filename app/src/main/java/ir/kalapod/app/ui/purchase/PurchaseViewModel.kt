@@ -17,6 +17,7 @@ import ir.kalapod.app.data.settings.SettingsRepository
 import ir.kalapod.app.domain.finance.DocumentCalculator
 import ir.kalapod.app.domain.finance.DocumentTotals
 import ir.kalapod.app.ui.cart.CartLine
+import ir.kalapod.app.ui.cart.Settlement
 import ir.kalapod.app.ui.cart.addOrIncrement
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,9 +31,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
-
-/** How the purchase is settled. CREDIT = some or all of it stays as a debt to the supplier. */
-enum class Settlement { CASH, CARD, CREDIT }
 
 data class PurchaseState(
     val clientUuid: String = UUID.randomUUID().toString(),
@@ -142,6 +140,8 @@ class PurchaseViewModel @Inject constructor(
                     is PostResult.Posted -> PurchaseState(currency = it.currency, lastPosted = r)
                     is PostResult.AlreadyPosted -> PurchaseState(currency = it.currency)
                     is PostResult.Invalid -> it.copy(posting = false, error = r.message)
+                    // Purchases add stock; this result is never produced for them.
+                    is PostResult.InsufficientStock -> it.copy(posting = false)
                 }
             }
         }

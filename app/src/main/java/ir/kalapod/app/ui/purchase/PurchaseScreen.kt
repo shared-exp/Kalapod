@@ -43,6 +43,7 @@ import ir.kalapod.app.core.format.PersianFormat
 import ir.kalapod.app.ui.cart.CartLineCard
 import ir.kalapod.app.ui.cart.PartyField
 import ir.kalapod.app.ui.cart.ProductPickerSheet
+import ir.kalapod.app.ui.cart.Settlement
 import ir.kalapod.app.ui.cart.SummaryRow
 
 @Composable

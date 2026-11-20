@@ -43,6 +43,9 @@ data class CartLine(
     }
 }
 
+/** How a document is settled. CREDIT = some or all of it stays as a debt (نسیه). */
+enum class Settlement(val label: String) { CASH("نقد"), CARD("کارت"), CREDIT("نسیه") }
+
 /** Adds a product, or bumps its quantity by one unit if it's already in the cart. */
 fun List<CartLine>.addOrIncrement(line: CartLine): List<CartLine> {
     val i = indexOfFirst { it.productId == line.productId }
