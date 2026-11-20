@@ -90,8 +90,8 @@ fun KalapodNavHost() {
                 )
             }
             // Screens below are implemented in roadmap steps 1.6–1.8 and 3.3.
-            composable(TopLevel.PURCHASE.route) { PurchaseScreen(onCreateProduct = { nav.navigate("product/edit") }) }
-            composable(TopLevel.SALE.route) { SaleScreen(onCreateProduct = { nav.navigate("product/edit") }) }
+            composable(TopLevel.PURCHASE.route) { PurchaseScreen(onCreateProduct = { code -> nav.navigate(if (code == null) "product/edit" else "product/edit?barcode=$code") }) }
+            composable(TopLevel.SALE.route) { SaleScreen(onCreateProduct = { code -> nav.navigate(if (code == null) "product/edit" else "product/edit?barcode=$code") }) }
             composable(TopLevel.INVENTORY.route) {
                 ProductListScreen(
                     onAdd = { nav.navigate("product/edit") },

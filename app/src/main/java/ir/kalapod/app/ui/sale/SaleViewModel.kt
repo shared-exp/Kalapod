@@ -53,7 +53,7 @@ data class SaleState(
 @HiltViewModel
 class SaleViewModel @Inject constructor(
     private val transactions: TransactionRepository,
-    products: ProductRepository,
+    private val products: ProductRepository,
     parties: PartyDao,
     settings: SettingsRepository,
 ) : ViewModel() {
@@ -142,6 +142,25 @@ class SaleViewModel @Inject constructor(
                     is PostResult.Invalid -> it.copy(posting = false, error = r.message)
                     is PostResult.InsufficientStock -> it.copy(posting = false, shortages = r.shortages)
                 }
+            }
+        }
+    }
+
+    /** Feedback line shown inside the scanner. */
+    val scanFeedback = MutableStateFlow("")
+    /** A scanned code with no product yet; the screen offers to define it. */
+    val unknownBarcode = MutableStateFlow<String?>(null)
+
+    fun onBarcode(code: String) {
+        viewModelScope.launch {
+            val p = products.findByBarcode(code)
+            if (p == null) {
+                scanFeedback.value = "بارکد $code ثبت نشده است"
+                unknownBarcode.value = code
+            } else {
+                add(p)
+                val q = _state.value.lines.firstOrNull { it.productId == p.id }?.quantityText.orEmpty()
+                scanFeedback.value = "${p.name} — تعداد: ${ir.kalapod.app.core.format.PersianFormat.digits(q)}"
             }
         }
     }

@@ -29,6 +29,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import ir.kalapod.app.ui.scanner.BarcodeScannerDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +52,10 @@ fun ProductListScreen(
     vm: ProductListViewModel = hiltViewModel(),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
+    var showScanner by remember { mutableStateOf(false) }
+    if (showScanner) {
+        BarcodeScannerDialog(feedback = "", onCode = { vm.setQuery(it); showScanner = false }, onClose = { showScanner = false })
+    }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Text(
@@ -63,6 +72,8 @@ fun ProductListScreen(
                 trailingIcon = {
                     if (s.filter.query.isNotEmpty()) {
                         IconButton(onClick = { vm.setQuery("") }) { Icon(Icons.Outlined.Close, "پاک کردن") }
+                    } else {
+                        IconButton(onClick = { showScanner = true }) { Icon(Icons.Outlined.QrCodeScanner, "جست‌وجو با بارکد") }
                     }
                 },
                 singleLine = true,

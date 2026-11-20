@@ -40,19 +40,25 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.kalapod.app.core.format.InputParser
 import ir.kalapod.app.core.format.PersianFormat
+import ir.kalapod.app.ui.cart.AddItemsRow
 import ir.kalapod.app.ui.cart.CartLineCard
+import ir.kalapod.app.ui.cart.UnknownBarcodeDialog
+import ir.kalapod.app.ui.scanner.BarcodeScannerDialog
 import ir.kalapod.app.ui.cart.PartyField
 import ir.kalapod.app.ui.cart.ProductPickerSheet
 import ir.kalapod.app.ui.cart.Settlement
 import ir.kalapod.app.ui.cart.SummaryRow
 
 @Composable
-fun PurchaseScreen(onCreateProduct: () -> Unit, vm: PurchaseViewModel = hiltViewModel()) {
+fun PurchaseScreen(onCreateProduct: (barcode: String?) -> Unit, vm: PurchaseViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val pickerProducts by vm.pickerProducts.collectAsStateWithLifecycle()
     val pickerQuery by vm.pickerQuery.collectAsStateWithLifecycle()
     val suppliers by vm.suppliers.collectAsStateWithLifecycle()
     var showPicker by remember { mutableStateOf(false) }
+    var showScanner by remember { mutableStateOf(false) }
+    val scanFeedback by vm.scanFeedback.collectAsStateWithLifecycle()
+    val unknownBarcode by vm.unknownBarcode.collectAsStateWithLifecycle()
     var confirm by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val cur = s.currency
@@ -76,13 +82,11 @@ fun PurchaseScreen(onCreateProduct: () -> Unit, vm: PurchaseViewModel = hiltView
                 CartLineCard(line, cur, onChange = { vm.updateLine(i, it) }, onRemove = { vm.removeLine(i) })
             }
             item {
-                FilledTonalButton(
-                    onClick = { vm.pickerQuery.value = ""; showPicker = true },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                ) {
-                    Icon(Icons.Outlined.Add, null)
-                    Text(if (s.lines.isEmpty()) "افزودن کالا به فاکتور خرید" else "افزودن کالای دیگر")
-                }
+                AddItemsRow(
+                    if (s.lines.isEmpty()) "افزودن کالا به فاکتور خرید" else "افزودن کالای دیگر",
+                    onPick = { vm.pickerQuery.value = ""; showPicker = true },
+                    onScan = { vm.scanFeedback.value = ""; showScanner = true },
+                )
             }
             if (s.lines.isNotEmpty()) {
                 item {
@@ -134,12 +138,23 @@ fun PurchaseScreen(onCreateProduct: () -> Unit, vm: PurchaseViewModel = hiltView
         SnackbarHost(snackbar)
     }
 
+    if (showScanner) {
+        BarcodeScannerDialog(feedback = scanFeedback, onCode = vm::onBarcode, onClose = { showScanner = false })
+    }
+    unknownBarcode?.let { code ->
+        UnknownBarcodeDialog(
+            code,
+            onDefine = { vm.unknownBarcode.value = null; showScanner = false; onCreateProduct(code) },
+            onDismiss = { vm.unknownBarcode.value = null },
+        )
+    }
+
     if (showPicker) {
         ProductPickerSheet(
             products = pickerProducts, query = pickerQuery, onQuery = { vm.pickerQuery.value = it },
             currency = cur, showPurchasePrice = true,
             onPick = { vm.add(it); showPicker = false },
-            onCreateNew = { showPicker = false; onCreateProduct() },
+            onCreateNew = { showPicker = false; onCreateProduct(null) },
             onDismiss = { showPicker = false },
         )
     }

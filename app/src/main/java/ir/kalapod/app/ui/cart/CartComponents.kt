@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -179,4 +180,32 @@ fun PartyField(
             )
         }
     }
+}
+
+/** The two ways to add items by hand: pick from the list, or scan barcodes. */
+@Composable
+fun AddItemsRow(label: String, onPick: () -> Unit, onScan: () -> Unit) {
+    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.FilledTonalButton(
+            onClick = onPick, modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+        ) {
+            Icon(Icons.Outlined.Add, null)
+            Text(label)
+        }
+        androidx.compose.material3.FilledTonalButton(onClick = onScan, modifier = Modifier.heightIn(min = 56.dp)) {
+            Icon(Icons.Outlined.QrCodeScanner, null)
+            Text("اسکن")
+        }
+    }
+}
+
+@Composable
+fun UnknownBarcodeDialog(code: String, onDefine: () -> Unit, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("کالای ناشناخته") },
+        text = { Text("بارکد ${PersianFormat.digits(code)} هنوز برای هیچ کالایی ثبت نشده است. همین حالا تعریفش کنید؟") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onDefine) { Text("تعریف کالا") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("بعداً") } },
+    )
 }

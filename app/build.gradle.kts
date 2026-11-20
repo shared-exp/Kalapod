@@ -59,6 +59,13 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
+    implementation(libs.camerax.core)
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.view)
+    // Bundled model: scanning works fully offline (SPEC §4).
+    implementation(libs.mlkit.barcode)
+
     implementation(libs.datastore)
     implementation(libs.work.runtime)
     implementation(libs.coroutines.android)
