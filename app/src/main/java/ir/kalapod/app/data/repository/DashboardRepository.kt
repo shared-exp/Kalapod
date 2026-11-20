@@ -51,7 +51,8 @@ class DashboardRepository @Inject constructor(
             transactionDao.observeLineMargin(SALE, from, to),
             transactionDao.observeDiscounts(SALE, from, to),
             transactionDao.observeLineMargin(SALE_RETURN, from, to),
-        ) { margin, discount, returnedMargin -> margin - discount - returnedMargin }
+            transactionDao.observeDiscounts(SALE_RETURN, from, to),
+        ) { margin, discount, retMargin, retDiscount -> (margin - discount) - (retMargin - retDiscount) }
         return combine(sales, purchases, profit) { s, p, g ->
             DaySummary(netSales = s.first, saleCount = s.second, netPurchases = p, grossProfit = g)
         }

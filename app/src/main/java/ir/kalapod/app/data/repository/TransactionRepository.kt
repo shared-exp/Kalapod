@@ -12,9 +12,12 @@ import ir.kalapod.app.data.local.entity.PaymentMethod
 import ir.kalapod.app.data.local.entity.SupplierEntity
 import ir.kalapod.app.data.local.entity.TransactionEntity
 import ir.kalapod.app.data.local.entity.TransactionItemEntity
+import ir.kalapod.app.data.local.entity.TransactionStatus
 import ir.kalapod.app.data.local.entity.TransactionType
 import ir.kalapod.app.domain.finance.DocumentCalculator
 import ir.kalapod.app.domain.finance.LineInput
+import ir.kalapod.app.domain.finance.Money
+import ir.kalapod.app.domain.finance.StockPosition
 import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
@@ -51,6 +54,19 @@ data class SaleDraft(
     val receivedMethod: PaymentMethod = PaymentMethod.CASH,
     /** True only after the user explicitly confirmed selling more than the recorded stock. */
     val allowOversell: Boolean = false,
+    val note: String? = null,
+    val occurredAt: Long = System.currentTimeMillis(),
+)
+
+data class ReturnLine(val productId: Long, val quantityMilli: Long)
+
+data class ReturnDraft(
+    val clientUuid: String,
+    val originalId: Long,
+    val lines: List<ReturnLine>,
+    /** Money actually given back (sale return) or received back (purchase return) now. */
+    val refundAmount: Long,
+    val refundMethod: PaymentMethod = PaymentMethod.CASH,
     val note: String? = null,
     val occurredAt: Long = System.currentTimeMillis(),
 )
@@ -172,6 +188,135 @@ class TransactionRepository @Inject constructor(
             }
             val number = issueInvoice(txId, "S", d.occurredAt)
             PostResult.Posted(txId, number, totals.total)
+        }
+    }
+
+    /**
+     * Cancels a posted document by writing an exact mirror: opposite ledger movements and opposite
+     * payments, linked by reversesId. The original stays in the database marked REVERSED (SPEC §6).
+     */
+    suspend fun reverse(originalId: Long, reason: String, at: Long = System.currentTimeMillis()): PostResult {
+        if (reason.isBlank()) return PostResult.Invalid("دلیل ابطال را بنویسید.")
+        return db.withTransaction {
+            val dao = db.transactionDao()
+            val orig = dao.get(originalId) ?: return@withTransaction PostResult.Invalid("سند پیدا نشد.")
+            if (orig.reversesId != null) return@withTransaction PostResult.Invalid("این سند خودش سند ابطال است.")
+            val uuid = "reverse-$originalId"
+            dao.byUuid(uuid)?.let { return@withTransaction PostResult.AlreadyPosted(it.id) }
+            if (orig.status == TransactionStatus.REVERSED) return@withTransaction PostResult.Invalid("این سند قبلاً باطل شده است.")
+            if (dao.activeReturnCount(originalId) > 0) {
+                return@withTransaction PostResult.Invalid("ابتدا مرجوعی‌های این فاکتور را باطل کنید.")
+            }
+            val now = System.currentTimeMillis()
+            val revId = dao.insert(
+                orig.copy(
+                    id = 0, clientUuid = uuid, reversesId = orig.id, occurredAt = at, createdAt = now,
+                    note = reason.trim(), status = TransactionStatus.POSTED,
+                ),
+            )
+            db.inventoryDao().forTransaction(originalId).forEach { m ->
+                ledger.applyExact(
+                    m.productId, StockPosition.Movement(-m.quantityDeltaMilli, -m.valueDelta),
+                    MovementReason.REVERSAL, revId, at, "ابطال سند",
+                )
+            }
+            db.paymentDao().forTransaction(originalId).filter { it.reversesPaymentId == null }.forEach { p ->
+                db.paymentDao().insert(
+                    p.copy(
+                        id = 0, clientUuid = "${p.clientUuid}-rev", transactionId = revId, reversesPaymentId = p.id,
+                        direction = if (p.direction == PaymentDirection.IN) PaymentDirection.OUT else PaymentDirection.IN,
+                        occurredAt = at, note = "ابطال",
+                    ),
+                )
+            }
+            dao.setStatus(originalId, TransactionStatus.REVERSED)
+            PostResult.Posted(revId, db.invoiceDao().forTransaction(originalId)?.number.orEmpty(), orig.total)
+        }
+    }
+
+    /** Return of part or all of a posted sale or purchase. */
+    suspend fun postReturn(d: ReturnDraft): PostResult {
+        val lines = d.lines.filter { it.quantityMilli > 0 }
+        if (lines.isEmpty()) return PostResult.Invalid("مقدار مرجوعی را وارد کنید.")
+        if (d.refundMethod == PaymentMethod.CREDIT) return PostResult.Invalid("روش بازپرداخت نامعتبر است.")
+        return db.withTransaction {
+            val dao = db.transactionDao()
+            dao.byUuid(d.clientUuid)?.let { return@withTransaction PostResult.AlreadyPosted(it.id) }
+            val orig = dao.get(d.originalId) ?: return@withTransaction PostResult.Invalid("فاکتور اصلی پیدا نشد.")
+            if (orig.status != TransactionStatus.POSTED || orig.reversesId != null) {
+                return@withTransaction PostResult.Invalid("این فاکتور باطل شده است.")
+            }
+            val isSale = when (orig.type) {
+                TransactionType.SALE -> true
+                TransactionType.PURCHASE -> false
+                else -> return@withTransaction PostResult.Invalid("برای مرجوعی نمی‌توان مرجوعی ثبت کرد.")
+            }
+            val origItems = dao.items(orig.id).groupBy { it.productId }
+
+            data class Calc(val productId: Long, val qty: Long, val lineTotal: Long, val cost: Long, val unitPrice: Long)
+            val calcs = lines.map { l ->
+                val items = origItems[l.productId] ?: return@withTransaction PostResult.Invalid("این کالا در فاکتور اصلی نیست.")
+                val soldQty = items.sumOf { it.quantityMilli }
+                val already = dao.returnedQuantity(orig.id, l.productId)
+                if (l.quantityMilli > soldQty - already) {
+                    val name = db.productDao().get(l.productId)?.name.orEmpty()
+                    return@withTransaction PostResult.Invalid("مقدار مرجوعی «$name» از مقدار باقی‌مانده فاکتور بیشتر است.")
+                }
+                val lineTotal = Money.divRoundHalfUp(items.sumOf { it.lineTotal } * l.quantityMilli, soldQty)
+                val cost = Money.divRoundHalfUp(items.sumOf { it.costTotal } * l.quantityMilli, soldQty)
+                Calc(l.productId, l.quantityMilli, lineTotal, cost, items.first().unitPrice)
+            }
+            val subtotal = calcs.sumOf { it.lineTotal }
+            // Proportional share of the original invoice discount (sales) / net cost (purchases).
+            val discountShare = if (isSale && orig.subtotal > 0) Money.divRoundHalfUp(orig.discount * subtotal, orig.subtotal) else 0L
+            val total = if (isSale) subtotal - discountShare else calcs.sumOf { it.cost }
+            if (d.refundAmount < 0 || d.refundAmount > total) return@withTransaction PostResult.Invalid("مبلغ بازپرداخت نامعتبر است.")
+
+            if (!isSale) {
+                for (c in calcs) {
+                    val p = db.productDao().get(c.productId)!!
+                    if (p.stockMilli < c.qty) return@withTransaction PostResult.Invalid("موجودی «${p.name}» برای مرجوعی کافی نیست.")
+                }
+            }
+
+            val now = System.currentTimeMillis()
+            val txId = dao.insert(
+                TransactionEntity(
+                    clientUuid = d.clientUuid,
+                    type = if (isSale) TransactionType.SALE_RETURN else TransactionType.PURCHASE_RETURN,
+                    occurredAt = d.occurredAt, customerId = orig.customerId, supplierId = orig.supplierId,
+                    subtotal = subtotal, discount = discountShare, total = total, originalId = orig.id,
+                    note = d.note, createdAt = now,
+                ),
+            )
+            dao.insertItems(
+                calcs.map {
+                    TransactionItemEntity(
+                        transactionId = txId, productId = it.productId, quantityMilli = it.qty,
+                        unitPrice = it.unitPrice, lineTotal = it.lineTotal, costTotal = it.cost,
+                    )
+                },
+            )
+            calcs.forEach { c ->
+                if (isSale) {
+                    ledger.receive(c.productId, c.qty, c.cost, MovementReason.SALE_RETURN, txId, d.occurredAt)
+                } else {
+                    // Goods go back to the supplier at the cost they came in with.
+                    ledger.applyExact(c.productId, StockPosition.Movement(-c.qty, -c.cost), MovementReason.PURCHASE_RETURN, txId, d.occurredAt)
+                }
+            }
+            if (d.refundAmount > 0) {
+                db.paymentDao().insert(
+                    PaymentEntity(
+                        clientUuid = "${d.clientUuid}-pay", transactionId = txId,
+                        customerId = orig.customerId, supplierId = orig.supplierId,
+                        direction = if (isSale) PaymentDirection.OUT else PaymentDirection.IN,
+                        method = d.refundMethod, amount = d.refundAmount, occurredAt = d.occurredAt,
+                    ),
+                )
+            }
+            val number = issueInvoice(txId, if (isSale) "SR" else "PR", d.occurredAt)
+            PostResult.Posted(txId, number, total)
         }
     }
 

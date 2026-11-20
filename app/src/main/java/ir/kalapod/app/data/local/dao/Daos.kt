@@ -138,7 +138,51 @@ interface TransactionDao {
             "AND reversesId IS NULL AND occurredAt BETWEEN :from AND :to",
     )
     fun observeCount(type: TransactionType, from: Long, to: Long): Flow<Int>
+
+    /** Quantity of [productId] already returned against [originalId] (posted returns only). */
+    @Query(
+        "SELECT COALESCE(SUM(i.quantityMilli),0) FROM transaction_items i JOIN transactions t ON t.id = i.transactionId " +
+            "WHERE t.originalId = :originalId AND t.status = 'POSTED' AND t.reversesId IS NULL AND i.productId = :productId",
+    )
+    suspend fun returnedQuantity(originalId: Long, productId: Long): Long
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE originalId = :originalId AND status = 'POSTED' AND reversesId IS NULL")
+    suspend fun activeReturnCount(originalId: Long): Int
+
+    /** Document list: business documents only (reversal records are shown inside their original). */
+    @Query(
+        "SELECT t.*, inv.number AS invoiceNumber, c.name AS customerName, s.name AS supplierName, " +
+            "(SELECT COUNT(*) FROM transaction_items i WHERE i.transactionId = t.id) AS itemCount " +
+            "FROM transactions t LEFT JOIN invoices inv ON inv.transactionId = t.id " +
+            "LEFT JOIN customers c ON c.id = t.customerId LEFT JOIN suppliers s ON s.id = t.supplierId " +
+            "WHERE t.reversesId IS NULL AND (:type IS NULL OR t.type = :type) " +
+            "ORDER BY t.occurredAt DESC, t.id DESC LIMIT :limit",
+    )
+    fun observeDocuments(type: TransactionType?, limit: Int): Flow<List<DocumentRow>>
+
+    @Query(
+        "SELECT i.*, p.name AS productName, p.unit AS unit FROM transaction_items i " +
+            "JOIN products p ON p.id = i.productId WHERE i.transactionId = :txId ORDER BY i.id",
+    )
+    suspend fun itemsWithProduct(txId: Long): List<ItemRow>
+
+    @Query("SELECT * FROM transactions WHERE originalId = :originalId AND reversesId IS NULL ORDER BY occurredAt")
+    suspend fun returnsOf(originalId: Long): List<TransactionEntity>
 }
+
+data class DocumentRow(
+    @androidx.room.Embedded val tx: TransactionEntity,
+    val invoiceNumber: String?,
+    val customerName: String?,
+    val supplierName: String?,
+    val itemCount: Int,
+)
+
+data class ItemRow(
+    @androidx.room.Embedded val item: TransactionItemEntity,
+    val productName: String,
+    val unit: ir.kalapod.app.data.local.entity.ProductUnit,
+)
 
 @Dao
 interface InvoiceDao {

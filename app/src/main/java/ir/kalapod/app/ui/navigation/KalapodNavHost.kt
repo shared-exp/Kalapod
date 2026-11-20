@@ -27,7 +27,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ir.kalapod.app.ui.dashboard.DashboardScreen
-import ir.kalapod.app.ui.common.UnderConstruction
+import ir.kalapod.app.ui.documents.DocumentDetailScreen
+import ir.kalapod.app.ui.documents.DocumentsScreen
 import ir.kalapod.app.ui.products.ProductEditScreen
 import ir.kalapod.app.ui.purchase.PurchaseScreen
 import ir.kalapod.app.ui.sale.SaleScreen
@@ -40,7 +41,7 @@ enum class TopLevel(val route: String, val label: String, val icon: ImageVector)
     PURCHASE("purchase", "خرید", Icons.Outlined.AddShoppingCart),
     SALE("sale", "فروش", Icons.Outlined.PointOfSale),
     INVENTORY("inventory", "انبار", Icons.Outlined.Inventory2),
-    REPORTS("reports", "گزارش‌ها", Icons.Outlined.BarChart),
+    REPORTS("reports", "فاکتورها", Icons.Outlined.BarChart),
 }
 
 @Composable
@@ -104,7 +105,11 @@ fun KalapodNavHost() {
                     navArgument("barcode") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) { ProductEditScreen(onDone = { nav.popBackStack() }) }
-            composable(TopLevel.REPORTS.route) { UnderConstruction("گزارش‌ها و تنظیمات", "گام ۳.۳") }
+            // Reports (step 3.3) will live here; until then the tab lists documents.
+            composable(TopLevel.REPORTS.route) { DocumentsScreen(onOpen = { nav.navigate("document/$it") }) }
+            composable("document/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) {
+                DocumentDetailScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("document/$it") })
+            }
         }
     }
 }

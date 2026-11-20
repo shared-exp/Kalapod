@@ -46,7 +46,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.rememberCoroutineScope
+import ir.kalapod.app.core.format.PersianFormat
 import ir.kalapod.app.data.local.entity.ProductUnit
+import kotlinx.coroutines.launch
 import ir.kalapod.app.ui.common.label
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -56,6 +59,7 @@ fun ProductEditScreen(onDone: () -> Unit, vm: ProductEditViewModel = hiltViewMod
     val categories by vm.categories.collectAsStateWithLifecycle()
     var showNewCategory by remember { mutableStateOf(false) }
     var confirmArchive by remember { mutableStateOf(false) }
+    var showAdjust by remember { mutableStateOf(false) }
 
     LaunchedEffect(f.done) { if (f.done) onDone() }
 
@@ -140,6 +144,9 @@ fun ProductEditScreen(onDone: () -> Unit, vm: ProductEditViewModel = hiltViewMod
             ) { Text("ذخیره", style = MaterialTheme.typography.titleMedium) }
 
             if (!f.isNew) {
+                OutlinedButton(onClick = { showAdjust = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("اصلاح موجودی (شمارش انبار)")
+                }
                 OutlinedButton(onClick = { confirmArchive = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("بایگانی کالا")
                 }
@@ -155,6 +162,39 @@ fun ProductEditScreen(onDone: () -> Unit, vm: ProductEditViewModel = hiltViewMod
             text = { OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("نام دسته") }) },
             confirmButton = { TextButton(onClick = { vm.addCategory(name); showNewCategory = false }) { Text("افزودن") } },
             dismissButton = { TextButton(onClick = { showNewCategory = false }) { Text("انصراف") } },
+        )
+    }
+    if (showAdjust) {
+        var count by remember { mutableStateOf("") }
+        var reason by remember { mutableStateOf("") }
+        var error by remember { mutableStateOf<String?>(null) }
+        var current by remember { mutableStateOf<Long?>(null) }
+        val scope = rememberCoroutineScope()
+        LaunchedEffect(Unit) { current = vm.currentStock() }
+        AlertDialog(
+            onDismissRequest = { showAdjust = false },
+            title = { Text("اصلاح موجودی") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("موجودی ثبت‌شده: " + (current?.let { PersianFormat.quantity(it) } ?: "…") + " " + f.unit.label)
+                    OutlinedTextField(
+                        count, { count = it; error = null }, singleLine = true,
+                        label = { Text("موجودی واقعی (${f.unit.label})") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                    OutlinedTextField(reason, { reason = it; error = null }, label = { Text("دلیل (مثلاً شمارش، ضایعات) *") })
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        error = vm.adjustStock(count, reason)
+                        if (error == null) showAdjust = false
+                    }
+                }) { Text("ثبت اصلاح") }
+            },
+            dismissButton = { TextButton(onClick = { showAdjust = false }) { Text("انصراف") } },
         )
     }
     if (confirmArchive) {

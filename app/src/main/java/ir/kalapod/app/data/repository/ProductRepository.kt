@@ -103,6 +103,24 @@ class ProductRepository @Inject constructor(
         }
     }
 
+    /**
+     * Stock count correction: sets stock to [countedMilli] by writing an ADJUSTMENT ledger row
+     * for the difference. [reason] is mandatory and kept in the ledger history.
+     */
+    suspend fun adjustStock(productId: Long, countedMilli: Long, reason: String, now: Long = System.currentTimeMillis()): String? {
+        if (reason.isBlank()) return "دلیل اصلاح را بنویسید."
+        if (countedMilli < 0) return "مقدار نامعتبر است."
+        return db.withTransaction {
+            val p = products.get(productId) ?: return@withTransaction "کالا پیدا نشد."
+            val delta = countedMilli - p.stockMilli
+            if (delta == 0L) return@withTransaction "موجودی تغییری نکرده است."
+            ledger.adjust(productId, delta, reason.trim(), now)
+            null
+        }
+    }
+
+    fun observeMovements(productId: Long) = db.inventoryDao().observeForProduct(productId)
+
     /** Products are archived, never deleted: their history stays in invoices and the ledger. */
     suspend fun setArchived(id: Long, archived: Boolean, now: Long = System.currentTimeMillis()) = db.withTransaction {
         val p = products.get(id) ?: return@withTransaction

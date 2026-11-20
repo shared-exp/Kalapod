@@ -133,5 +133,14 @@ class ProductEditViewModel @Inject constructor(
         }
     }
 
+    /** Current stock for the adjust dialog. */
+    suspend fun currentStock(): Long = repo.get(productId)?.stockMilli ?: 0L
+
+    /** Returns an error message, or null on success. */
+    suspend fun adjustStock(countText: String, reason: String): String? {
+        val counted = InputParser.quantity(countText) ?: return "مقدار شمارش‌شده نامعتبر است."
+        return repo.adjustStock(productId, counted, reason)
+    }
+
     private fun fail(msg: String) = _form.update { it.copy(error = msg) }
 }
