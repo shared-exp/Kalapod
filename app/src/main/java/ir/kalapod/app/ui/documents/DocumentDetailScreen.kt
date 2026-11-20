@@ -53,10 +53,19 @@ import ir.kalapod.app.ui.cart.SummaryRow
 import ir.kalapod.app.ui.common.formatDateTime
 import ir.kalapod.app.ui.common.label
 import kotlinx.coroutines.launch
+import ir.kalapod.app.domain.voice.VoiceOperation
+import ir.kalapod.app.voice.VoiceButton
+import ir.kalapod.app.voice.VoiceSheet
+import ir.kalapod.app.voice.VoiceViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DocumentDetailScreen(onBack: () -> Unit, onOpen: (Long) -> Unit, vm: DocumentDetailViewModel = hiltViewModel()) {
+fun DocumentDetailScreen(
+    onBack: () -> Unit,
+    onOpen: (Long) -> Unit,
+    vm: DocumentDetailViewModel = hiltViewModel(),
+    voiceVm: VoiceViewModel = hiltViewModel(key = "return-voice"),
+) {
     val s by vm.state.collectAsStateWithLifecycle()
     var showReturn by remember { mutableStateOf(false) }
     var showReverse by remember { mutableStateOf(false) }
@@ -161,6 +170,10 @@ fun DocumentDetailScreen(onBack: () -> Unit, onOpen: (Long) -> Unit, vm: Documen
             title = { Text(if (isSale) "مرجوعی فروش" else "مرجوعی خرید") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        VoiceButton(onClick = { voiceVm.begin(forPurchase = !isSale) })
+                        Text("بگویید چه چیزی برگشت، مثلاً «یک بسته ماکارونی»", style = MaterialTheme.typography.bodySmall)
+                    }
                     s.returnLines.forEachIndexed { i, l ->
                         OutlinedTextField(
                             l.quantityText, { vm.setReturnQty(i, it) }, singleLine = true,
@@ -188,6 +201,12 @@ fun DocumentDetailScreen(onBack: () -> Unit, onOpen: (Long) -> Unit, vm: Documen
             dismissButton = { TextButton(onClick = { showReturn = false }) { Text("انصراف") } },
         )
     }
+
+    VoiceSheet(
+        voiceVm, VoiceOperation.RETURN, s.currency,
+        onApply = { lines, _ -> vm.applyVoiceToReturn(lines) },
+        onDefine = {},
+    )
 
     if (showReverse) {
         var reason by remember { mutableStateOf("") }

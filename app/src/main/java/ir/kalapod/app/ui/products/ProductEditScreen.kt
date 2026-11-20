@@ -50,6 +50,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import ir.kalapod.app.core.format.PersianFormat
 import ir.kalapod.app.data.local.entity.ProductUnit
 import kotlinx.coroutines.launch
+import ir.kalapod.app.core.format.InputParser
+import ir.kalapod.app.voice.DictationButton
+import ir.kalapod.app.voice.spokenQuantity
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.HorizontalDivider
 import ir.kalapod.app.ui.common.formatDateTime
@@ -91,6 +94,7 @@ fun ProductEditScreen(
             OutlinedTextField(
                 f.name, { v -> vm.edit { it.copy(name = v) } },
                 label = { Text("نام کالا *") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                trailingIcon = { DictationButton("name") { v -> vm.edit { it.copy(name = v) } } },
             )
 
             Section("واحد")
@@ -211,8 +215,17 @@ fun ProductEditScreen(
                         count, { count = it; error = null }, singleLine = true,
                         label = { Text("موجودی واقعی (${f.unit.label})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        trailingIcon = {
+                            DictationButton("count") { heard ->
+                                spokenQuantity(heard)?.let { count = InputParser.quantityForEdit(it) }
+                                    ?: run { error = "عددی شنیده نشد: «$heard»" }
+                            }
+                        },
                     )
-                    OutlinedTextField(reason, { reason = it; error = null }, label = { Text("دلیل (مثلاً شمارش، ضایعات) *") })
+                    OutlinedTextField(
+                        reason, { reason = it; error = null }, label = { Text("دلیل (مثلاً شمارش، ضایعات) *") },
+                        trailingIcon = { DictationButton("reason") { reason = it } },
+                    )
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },

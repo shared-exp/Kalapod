@@ -115,5 +115,10 @@ class VoskSpeechEngine(private val model: Model) : SpeechEngine {
     }
 
     override fun stop() { service?.stop() }
-    override fun cancel() { service?.shutdown(); service = null }
+    override fun cancel() {
+        // Stop (and join) the reader thread before releasing the mic, or Vosk's thread crashes the app
+        // with "error reading audio buffer".
+        service?.let { it.cancel(); it.shutdown() }
+        service = null
+    }
 }

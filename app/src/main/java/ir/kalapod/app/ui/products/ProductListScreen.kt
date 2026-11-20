@@ -73,7 +73,10 @@ fun ProductListScreen(
                     if (s.filter.query.isNotEmpty()) {
                         IconButton(onClick = { vm.setQuery("") }) { Icon(Icons.Outlined.Close, "پاک کردن") }
                     } else {
-                        IconButton(onClick = { showScanner = true }) { Icon(Icons.Outlined.QrCodeScanner, "جست‌وجو با بارکد") }
+                        androidx.compose.foundation.layout.Row {
+                            ir.kalapod.app.voice.DictationButton("search") { vm.setQuery(it) }
+                            IconButton(onClick = { showScanner = true }) { Icon(Icons.Outlined.QrCodeScanner, "جست‌وجو با بارکد") }
+                        }
                     }
                 },
                 singleLine = true,

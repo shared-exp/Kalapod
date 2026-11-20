@@ -54,9 +54,27 @@ class VoiceViewModel @Inject constructor(
     var awaitingDefine = false
     private var forPurchase = false
 
-    /** Starts a session. [forPurchase] chooses which default prices fill unspecified prices. */
+    /** Dictation mode: deliver the heard text as-is (search box, a name, a counted quantity). */
+    private var rawMode = false
+    private val _rawText = MutableStateFlow<String?>(null)
+    /** Last dictated text; the host consumes it with [consumeRawText]. */
+    val rawText: StateFlow<String?> = _rawText.asStateFlow()
+    fun consumeRawText() { _rawText.value = null }
+
+    fun beginDictation() { rawMode = true; start() }
+
+    val isDictation get() = rawMode
+
+    fun retry(forPurchase: Boolean) = if (rawMode) beginDictation() else begin(forPurchase)
+
+    /** Starts an item session. [forPurchase] chooses which default prices fill unspecified prices. */
     fun begin(forPurchase: Boolean) {
         this.forPurchase = forPurchase
+        rawMode = false
+        start()
+    }
+
+    private fun start() {
         viewModelScope.launch {
             val consent = settings.settings.first().onlineVoiceConsent
             val onlineOk = SystemSpeechEngine.isAvailable(context) && isOnline()
@@ -104,6 +122,7 @@ class VoiceViewModel @Inject constructor(
     /** Also usable without the microphone (e.g. typed text or tests). */
     fun process(text: String) {
         if (text.isBlank()) { _phase.value = VoicePhase.Error("صدایی شنیده نشد. دوباره بگویید."); return }
+        if (rawMode) { engine?.cancel(); engine = null; _rawText.value = text.trim(); _phase.value = VoicePhase.Idle; return }
         viewModelScope.launch {
             val cmd = VoiceCommandParser.parse(text)
             val catalog = products.observeActive().first().map {

@@ -99,6 +99,21 @@ class DocumentDetailViewModel @Inject constructor(
         s.copy(returnLines = s.returnLines.toMutableList().also { it[i] = it[i].copy(quantityText = text) }, error = null)
     }
 
+    /** Fills return quantities from voice; items not on this invoice are reported, not guessed. */
+    fun applyVoiceToReturn(lines: List<ir.kalapod.app.domain.voice.ResolvedLine>) = _state.update { s ->
+        var rl = s.returnLines
+        val missing = mutableListOf<String>()
+        lines.forEach { l ->
+            val i = rl.indexOfFirst { it.item.item.productId == l.product?.id }
+            if (i < 0) missing += (l.product?.name ?: l.heard.name)
+            else rl = rl.toMutableList().also { it[i] = it[i].copy(quantityText = InputParser.quantityForEdit(l.quantityMilli)) }
+        }
+        s.copy(
+            returnLines = rl,
+            error = if (missing.isEmpty()) null else missing.joinToString("، ") { "«$it»" } + " در این فاکتور نیست.",
+        )
+    }
+
     fun setRefund(text: String) = _state.update { it.copy(refundText = text, error = null) }
     fun setRefundMethod(m: PaymentMethod) = _state.update { it.copy(refundMethod = m) }
 

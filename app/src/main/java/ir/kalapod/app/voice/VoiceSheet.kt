@@ -127,7 +127,12 @@ fun VoiceSheet(
                 is VoicePhase.Listening -> {
                     Text(if (p.engine == "offline") "در حال گوش دادن (آفلاین)…" else "در حال گوش دادن…", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        p.partial.ifBlank { "مثلاً: «سه تا روغن و دو بسته ماکارونی فروختم»" },
+                        p.partial.ifBlank { when {
+                            vm.isDictation -> "بگویید…"
+                            expected == VoiceOperation.RETURN -> "مثلاً: «یک بسته ماکارونی و دو تا روغن»"
+                            expected == VoiceOperation.PURCHASE -> "مثلاً: «ده کیلو برنج کیلویی ۱۸۰ هزار خریدم»"
+                            else -> "مثلاً: «سه تا روغن و دو بسته ماکارونی فروختم»"
+                        } },
                         style = MaterialTheme.typography.bodyLarge,
                         color = if (p.partial.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                     )
@@ -146,7 +151,7 @@ fun VoiceSheet(
 
                 is VoicePhase.Error -> {
                     Text(p.message, style = MaterialTheme.typography.titleMedium)
-                    Button(onClick = { vm.begin(expected == VoiceOperation.PURCHASE) }, Modifier.fillMaxWidth()) { Text("دوباره بگویید") }
+                    Button(onClick = { vm.retry(expected == VoiceOperation.PURCHASE) }, Modifier.fillMaxWidth()) { Text("دوباره بگویید") }
                     OutlinedButton(onClick = vm::close, Modifier.fillMaxWidth()) { Text("بستن") }
                 }
 
@@ -168,7 +173,13 @@ private fun ReviewContent(
 ) {
     Text("«${p.heard}»", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val said = VoiceViewModel.operationLabel(p.command.operation)
-    if (expected != null && p.command.operation != null && p.command.operation != expected) {
+    val returnOnWrongScreen = p.command.operation == VoiceOperation.RETURN && expected != VoiceOperation.RETURN
+    if (returnOnWrongScreen) {
+        Text(
+            "برای مرجوعی، از تب «فاکتورها» فاکتور مربوط را باز کنید و «ثبت مرجوعی» را بزنید؛ آنجا هم می‌توانید با صدا بگویید.",
+            color = MaterialTheme.colorScheme.error,
+        )
+    } else if (expected != null && p.command.operation != null && p.command.operation != expected) {
         Text("گفتید «$said» ولی این صفحه «${VoiceViewModel.operationLabel(expected)}» است. اقلام به همین صفحه اضافه می‌شوند.",
             color = MaterialTheme.colorScheme.error)
     }
@@ -206,14 +217,35 @@ private fun ReviewContent(
     val ready = p.lines.filter { it.product != null }
     Button(
         onClick = { onApply(ready, p.command); vm.close() },
-        enabled = ready.isNotEmpty(),
+        enabled = ready.isNotEmpty() && !returnOnWrongScreen,
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
     ) {
         Text(
-            if (ready.size == p.lines.size) "افزودن به سبد"
+            if (expected == VoiceOperation.RETURN) "ثبت در فرم مرجوعی"
+            else if (ready.size == p.lines.size) "افزودن به سبد"
             else "افزودن ${PersianFormat.number(ready.size.toLong())} قلم مشخص‌شده",
             style = MaterialTheme.typography.titleMedium,
         )
     }
     OutlinedButton(onClick = { vm.begin(expected == VoiceOperation.PURCHASE) }, Modifier.fillMaxWidth()) { Text("دوباره بگویید") }
+}
+
+/**
+ * Small mic icon for any text field: dictates and hands back the text.
+ * [key] keeps each field's voice session separate on the same screen.
+ */
+@Composable
+fun DictationButton(key: String, onText: (String) -> Unit) {
+    val vm: VoiceViewModel = androidx.hilt.navigation.compose.hiltViewModel(key = "dictation-$key")
+    val text by vm.rawText.collectAsStateWithLifecycle()
+    LaunchedEffect(text) { text?.let { onText(it); vm.consumeRawText() } }
+    IconButton(onClick = vm::beginDictation) { Icon(Icons.Outlined.Mic, "گفتن به‌جای تایپ") }
+    VoiceSheet(vm, expected = null, currency = Currency.TOMAN, onApply = { _, _ -> }, onDefine = {})
+}
+
+/** First spoken number in [text] as milli-units ("دوازده و نیم کیلو" → 12500), or null. */
+fun spokenQuantity(text: String): Long? {
+    val t = ir.kalapod.app.domain.voice.PersianText.tokens(text)
+    for (i in t.indices) ir.kalapod.app.domain.voice.SpokenNumbers.parse(t, i)?.let { return it.milli }
+    return null
 }
