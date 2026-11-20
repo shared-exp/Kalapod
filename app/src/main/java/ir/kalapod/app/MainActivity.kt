@@ -9,12 +9,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import dagger.hilt.android.AndroidEntryPoint
+import ir.kalapod.app.core.format.PersianFormat
+import ir.kalapod.app.core.jalali.JalaliDate
+import ir.kalapod.app.ui.theme.KalapodTheme
+import java.time.LocalDate
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -22,11 +23,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                MaterialTheme {
-                    Surface(Modifier.fillMaxSize()) {
-                        // Placeholder until step 1.5 (navigation + dashboard).
-                        Box(contentAlignment = Alignment.Center) { Text("کالاپاد") }
+            KalapodTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    // Replaced by navigation + dashboard in step 1.5.
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            "کالاپاد — " + PersianFormat.longDate(JalaliDate.of(LocalDate.now())),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
                     }
                 }
             }
