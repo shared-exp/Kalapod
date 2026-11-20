@@ -28,6 +28,16 @@ val ir.kalapod.app.data.local.entity.PaymentMethod.label: String
         ir.kalapod.app.data.local.entity.PaymentMethod.CREDIT -> "نسیه"
     }
 
+val ir.kalapod.app.data.local.entity.MovementReason.label: String
+    get() = when (this) {
+        ir.kalapod.app.data.local.entity.MovementReason.PURCHASE -> "خرید"
+        ir.kalapod.app.data.local.entity.MovementReason.SALE -> "فروش"
+        ir.kalapod.app.data.local.entity.MovementReason.PURCHASE_RETURN -> "مرجوعی خرید"
+        ir.kalapod.app.data.local.entity.MovementReason.SALE_RETURN -> "مرجوعی فروش"
+        ir.kalapod.app.data.local.entity.MovementReason.ADJUSTMENT -> "اصلاح موجودی"
+        ir.kalapod.app.data.local.entity.MovementReason.REVERSAL -> "ابطال سند"
+    }
+
 /** Jalali date + HH:mm for an epoch-millis timestamp, in Persian digits. */
 fun formatDateTime(epochMillis: Long): String {
     val dt = java.time.Instant.ofEpochMilli(epochMillis).atZone(java.time.ZoneId.systemDefault())

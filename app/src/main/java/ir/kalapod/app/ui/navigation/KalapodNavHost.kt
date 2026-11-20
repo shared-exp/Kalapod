@@ -104,7 +104,7 @@ fun KalapodNavHost() {
                     navArgument("id") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("barcode") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
-            ) { ProductEditScreen(onDone = { nav.popBackStack() }) }
+            ) { ProductEditScreen(onDone = { nav.popBackStack() }, onOpenDocument = { nav.navigate("document/$it") }) }
             // Reports (step 3.3) will live here; until then the tab lists documents.
             composable(TopLevel.REPORTS.route) { DocumentsScreen(onOpen = { nav.navigate("document/$it") }) }
             composable("document/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) {

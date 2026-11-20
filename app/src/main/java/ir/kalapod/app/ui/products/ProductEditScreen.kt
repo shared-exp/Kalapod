@@ -50,12 +50,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import ir.kalapod.app.core.format.PersianFormat
 import ir.kalapod.app.data.local.entity.ProductUnit
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.HorizontalDivider
+import ir.kalapod.app.ui.common.formatDateTime
 import ir.kalapod.app.ui.common.label
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ProductEditScreen(onDone: () -> Unit, vm: ProductEditViewModel = hiltViewModel()) {
+fun ProductEditScreen(
+    onDone: () -> Unit,
+    onOpenDocument: (Long) -> Unit = {},
+    vm: ProductEditViewModel = hiltViewModel(),
+) {
     val f by vm.form.collectAsStateWithLifecycle()
+    val movements by vm.movements.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
     var showNewCategory by remember { mutableStateOf(false) }
     var confirmArchive by remember { mutableStateOf(false) }
@@ -149,6 +157,28 @@ fun ProductEditScreen(onDone: () -> Unit, vm: ProductEditViewModel = hiltViewMod
                 }
                 OutlinedButton(onClick = { confirmArchive = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("بایگانی کالا")
+                }
+                Section("تاریخچه گردش کالا")
+                if (movements.isEmpty()) {
+                    Text("هنوز گردشی ثبت نشده است.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                movements.take(100).forEach { m ->
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .then(if (m.transactionId != null) Modifier.clickable { onOpenDocument(m.transactionId) } else Modifier)
+                            .padding(vertical = 8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(m.reason.label + (m.note?.let { " — $it" } ?: ""), style = MaterialTheme.typography.bodyMedium)
+                            Text(formatDateTime(m.occurredAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(
+                            (if (m.quantityDeltaMilli > 0) "+" else "") + PersianFormat.quantity(m.quantityDeltaMilli),
+                            color = if (m.quantityDeltaMilli >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                    }
+                    HorizontalDivider()
                 }
             }
         }

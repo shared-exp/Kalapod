@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.kalapod.app.core.format.Currency
 import ir.kalapod.app.core.format.InputParser
 import ir.kalapod.app.data.local.entity.CategoryEntity
+import ir.kalapod.app.data.local.entity.InventoryMovementEntity
 import ir.kalapod.app.data.local.entity.ProductUnit
 import ir.kalapod.app.data.repository.ProductDraft
 import ir.kalapod.app.data.repository.ProductRepository
@@ -132,6 +133,11 @@ class ProductEditViewModel @Inject constructor(
             _form.update { it.copy(isArchived = archived, done = archived) }
         }
     }
+
+    /** Ledger history, newest first (empty for a new product). */
+    val movements: StateFlow<List<InventoryMovementEntity>> =
+        (if (productId == 0L) kotlinx.coroutines.flow.flowOf(emptyList()) else repo.observeMovements(productId))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Current stock for the adjust dialog. */
     suspend fun currentStock(): Long = repo.get(productId)?.stockMilli ?: 0L

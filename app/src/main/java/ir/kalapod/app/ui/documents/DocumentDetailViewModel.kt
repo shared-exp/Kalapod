@@ -102,10 +102,22 @@ class DocumentDetailViewModel @Inject constructor(
     fun setRefund(text: String) = _state.update { it.copy(refundText = text, error = null) }
     fun setRefundMethod(m: PaymentMethod) = _state.update { it.copy(refundMethod = m) }
 
-    /** Value of the return as currently entered (approximate; the repository computes the exact amount). */
-    fun estimatedReturnValue(s: DetailState): Long = s.returnLines.sumOf { l ->
-        val q = InputParser.quantity(l.quantityText) ?: 0
-        if (l.item.item.quantityMilli == 0L) 0 else Money.divRoundHalfUp(l.item.item.lineTotal * q, l.item.item.quantityMilli)
+    /** Value of the return as currently entered, using the same rules as the repository. */
+    fun estimatedReturnValue(s: DetailState): Long {
+        val d = s.detail ?: return 0
+        val gross = s.returnLines.sumOf { l ->
+            val q = InputParser.quantity(l.quantityText) ?: 0
+            if (l.item.item.quantityMilli == 0L) 0 else Money.divRoundHalfUp(l.item.item.lineTotal * q, l.item.item.quantityMilli)
+        }
+        return if (d.tx.type == TransactionType.SALE && d.tx.subtotal > 0) {
+            gross - Money.divRoundHalfUp(d.tx.discount * gross, d.tx.subtotal)
+        } else if (d.tx.type == TransactionType.PURCHASE) {
+            // Purchase returns are valued at net cost (discount and extra cost included).
+            s.returnLines.sumOf { l ->
+                val q = InputParser.quantity(l.quantityText) ?: 0
+                if (l.item.item.quantityMilli == 0L) 0 else Money.divRoundHalfUp(l.item.item.costTotal * q, l.item.item.quantityMilli)
+            }
+        } else gross
     }
 
     /** Returns true when posted. */
