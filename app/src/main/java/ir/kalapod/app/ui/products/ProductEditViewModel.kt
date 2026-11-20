@@ -51,6 +51,7 @@ class ProductEditViewModel @Inject constructor(
 ) : ViewModel() {
     private val productId: Long = savedState.get<Long>("id") ?: 0L
     private val initialBarcode: String? = savedState.get<String>("barcode")?.takeIf { it.isNotBlank() }
+    private val initialName: String = savedState.get<String>("name").orEmpty()
 
     private val _form = MutableStateFlow(ProductForm())
     val form: StateFlow<ProductForm> = _form.asStateFlow()
@@ -63,7 +64,7 @@ class ProductEditViewModel @Inject constructor(
             val cur = settings.settings.first().currency
             val p = if (productId != 0L) repo.get(productId) else null
             _form.value = if (p == null) {
-                ProductForm(loaded = true, currency = cur, barcodes = listOfNotNull(initialBarcode))
+                ProductForm(loaded = true, currency = cur, barcodes = listOfNotNull(initialBarcode), name = initialName)
             } else {
                 ProductForm(
                     loaded = true, isNew = false, name = p.name, categoryId = p.categoryId, unit = p.unit,

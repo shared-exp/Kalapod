@@ -43,13 +43,21 @@ import ir.kalapod.app.ui.cart.AddItemsRow
 import ir.kalapod.app.ui.cart.CartLineCard
 import ir.kalapod.app.ui.cart.UnknownBarcodeDialog
 import ir.kalapod.app.ui.scanner.BarcodeScannerDialog
+import ir.kalapod.app.domain.voice.VoiceOperation
+import ir.kalapod.app.voice.VoiceSheet
+import ir.kalapod.app.voice.VoiceViewModel
 import ir.kalapod.app.ui.cart.PartyField
 import ir.kalapod.app.ui.cart.ProductPickerSheet
 import ir.kalapod.app.ui.cart.Settlement
 import ir.kalapod.app.ui.cart.SummaryRow
 
 @Composable
-fun SaleScreen(onCreateProduct: (barcode: String?) -> Unit, vm: SaleViewModel = hiltViewModel()) {
+fun SaleScreen(
+    onCreateProduct: (barcode: String?) -> Unit,
+    onDefineNamed: (name: String) -> Unit,
+    vm: SaleViewModel = hiltViewModel(),
+    voiceVm: VoiceViewModel = hiltViewModel(),
+) {
     val s by vm.state.collectAsStateWithLifecycle()
     val pickerProducts by vm.pickerProducts.collectAsStateWithLifecycle()
     val pickerQuery by vm.pickerQuery.collectAsStateWithLifecycle()
@@ -85,9 +93,10 @@ fun SaleScreen(onCreateProduct: (barcode: String?) -> Unit, vm: SaleViewModel = 
             }
             item {
                 AddItemsRow(
-                    if (s.lines.isEmpty()) "افزودن کالا به سبد فروش" else "افزودن کالای دیگر",
+                    if (s.lines.isEmpty()) "افزودن کالا" else "کالای دیگر",
                     onPick = { vm.pickerQuery.value = ""; showPicker = true },
                     onScan = { vm.scanFeedback.value = ""; showScanner = true },
+                    onVoice = { voiceVm.begin(forPurchase = false) },
                 )
             }
             if (s.lines.isNotEmpty()) {
@@ -140,6 +149,14 @@ fun SaleScreen(onCreateProduct: (barcode: String?) -> Unit, vm: SaleViewModel = 
         }
         SnackbarHost(snackbar)
     }
+
+    // Returning from "define product" during a voice session: re-match what was heard.
+    LaunchedEffect(Unit) { if (voiceVm.awaitingDefine) { voiceVm.awaitingDefine = false; voiceVm.refreshAfterDefine() } }
+    VoiceSheet(
+        voiceVm, VoiceOperation.SALE, cur,
+        onApply = vm::applyVoice,
+        onDefine = { name -> voiceVm.awaitingDefine = true; onDefineNamed(name) },
+    )
 
     if (showScanner) {
         BarcodeScannerDialog(feedback = scanFeedback, onCode = vm::onBarcode, onClose = { showScanner = false })

@@ -18,6 +18,8 @@ data class AppSettings(
     val currency: Currency = Currency.TOMAN,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val shopName: String = "",
+    /** null = never asked; true/false = user's answer about sending audio to the online recognizer. */
+    val onlineVoiceConsent: Boolean? = null,
 )
 
 /** User preferences (UI-level). Financial data never lives here. */
@@ -32,8 +34,12 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             currency = p[currencyKey]?.let { runCatching { Currency.valueOf(it) }.getOrNull() } ?: Currency.TOMAN,
             themeMode = p[themeKey]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
             shopName = p[shopNameKey].orEmpty(),
+            onlineVoiceConsent = p[voiceConsentKey]?.toBooleanStrictOrNull(),
         )
     }
+
+    private val voiceConsentKey = stringPreferencesKey("online_voice_consent")
+    suspend fun setOnlineVoiceConsent(allowed: Boolean) = context.dataStore.edit { it[voiceConsentKey] = allowed.toString() }
 
     suspend fun setCurrency(c: Currency) = context.dataStore.edit { it[currencyKey] = c.name }
     suspend fun setThemeMode(m: ThemeMode) = context.dataStore.edit { it[themeKey] = m.name }

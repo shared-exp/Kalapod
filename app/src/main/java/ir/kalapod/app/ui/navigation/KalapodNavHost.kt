@@ -90,8 +90,14 @@ fun KalapodNavHost() {
                 )
             }
             // Screens below are implemented in roadmap steps 1.6–1.8 and 3.3.
-            composable(TopLevel.PURCHASE.route) { PurchaseScreen(onCreateProduct = { code -> nav.navigate(if (code == null) "product/edit" else "product/edit?barcode=$code") }) }
-            composable(TopLevel.SALE.route) { SaleScreen(onCreateProduct = { code -> nav.navigate(if (code == null) "product/edit" else "product/edit?barcode=$code") }) }
+            composable(TopLevel.PURCHASE.route) { PurchaseScreen(
+                    onCreateProduct = { code -> nav.navigate(if (code == null) "product/edit" else "product/edit?barcode=$code") },
+                    onDefineNamed = { name -> nav.navigate("product/edit?name=" + android.net.Uri.encode(name)) },
+                ) }
+            composable(TopLevel.SALE.route) { SaleScreen(
+                    onCreateProduct = { code -> nav.navigate(if (code == null) "product/edit" else "product/edit?barcode=$code") },
+                    onDefineNamed = { name -> nav.navigate("product/edit?name=" + android.net.Uri.encode(name)) },
+                ) }
             composable(TopLevel.INVENTORY.route) {
                 ProductListScreen(
                     onAdd = { nav.navigate("product/edit") },
@@ -99,10 +105,11 @@ fun KalapodNavHost() {
                 )
             }
             composable(
-                "product/edit?id={id}&barcode={barcode}",
+                "product/edit?id={id}&barcode={barcode}&name={name}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("barcode") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("name") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) { ProductEditScreen(onDone = { nav.popBackStack() }, onOpenDocument = { nav.navigate("document/$it") }) }
             // Reports (step 3.3) will live here; until then the tab lists documents.

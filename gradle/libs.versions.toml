@@ -15,6 +15,8 @@ coroutines = "1.9.0"
 junit = "4.13.2"
 camerax = "1.4.1"
 mlkitBarcode = "17.3.0"
+vosk = "0.3.47"
+jna = "5.13.0"
 
 [libraries]
 androidx-core = { module = "androidx.core:core-ktx", version = "1.15.0" }
@@ -49,6 +51,8 @@ camerax-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "ca
 camerax-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 mlkit-barcode = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkitBarcode" }
+vosk-android = { module = "com.alphacephei:vosk-android", version.ref = "vosk" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

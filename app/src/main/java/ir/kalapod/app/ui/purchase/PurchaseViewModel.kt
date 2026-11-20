@@ -166,6 +166,29 @@ class PurchaseViewModel @Inject constructor(
         }
     }
 
+    /** Adds confirmed voice lines; also takes the spoken party/payment if the user hasn't set them. */
+    fun applyVoice(lines: List<ir.kalapod.app.domain.voice.ResolvedLine>, cmd: ir.kalapod.app.domain.voice.ParsedCommand) {
+        viewModelScope.launch {
+            val fetched = lines.mapNotNull { l -> products.get(l.product!!.id)?.let { it to l } }
+            edit { s ->
+                var ls = s.lines
+                fetched.forEach { (p, l) ->
+                    ls = ls.addOrIncrement(CartLine.of(p, l.unitPrice ?: p.lastPurchasePrice, s.currency, l.quantityMilli))
+                }
+                s.copy(
+                    lines = ls,
+                    supplierText = if (s.supplierText.isBlank()) cmd.partyName.orEmpty() else s.supplierText,
+                    settlement = when (cmd.payment) {
+                        ir.kalapod.app.domain.voice.VoicePayment.CREDIT -> Settlement.CREDIT
+                        ir.kalapod.app.domain.voice.VoicePayment.CARD -> Settlement.CARD
+                        ir.kalapod.app.domain.voice.VoicePayment.CASH -> Settlement.CASH
+                        null -> s.settlement
+                    },
+                )
+            }
+        }
+    }
+
     fun consumePosted() = _state.update { it.copy(lastPosted = null) }
 
     private fun parseOptional(text: String, currency: Currency): Long? =

@@ -66,6 +66,10 @@ dependencies {
     // Bundled model: scanning works fully offline (SPEC §4).
     implementation(libs.mlkit.barcode)
 
+    // Offline Persian speech recognition; the model is downloaded once inside the app.
+    implementation(libs.vosk.android) { exclude(group = "net.java.dev.jna") }
+    implementation("${libs.jna.get()}@aar")
+
     implementation(libs.datastore)
     implementation(libs.work.runtime)
     implementation(libs.coroutines.android)

@@ -182,10 +182,11 @@ fun PartyField(
     }
 }
 
-/** The two ways to add items by hand: pick from the list, or scan barcodes. */
+/** The three ways to add items: speak, pick from the list, or scan barcodes. */
 @Composable
-fun AddItemsRow(label: String, onPick: () -> Unit, onScan: () -> Unit) {
-    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+fun AddItemsRow(label: String, onPick: () -> Unit, onScan: () -> Unit, onVoice: () -> Unit) {
+    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        ir.kalapod.app.voice.VoiceButton(onClick = onVoice)
         androidx.compose.material3.FilledTonalButton(
             onClick = onPick, modifier = Modifier.weight(1f).heightIn(min = 56.dp),
         ) {
