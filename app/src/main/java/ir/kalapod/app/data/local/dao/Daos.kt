@@ -100,14 +100,26 @@ interface TransactionDao {
     )
     fun observeTotal(type: TransactionType, from: Long, to: Long): Flow<Long>
 
-    /** Sum of (line revenue - line cost) for posted sales, before invoice-level discount. */
+    /** Sum of (line revenue - line cost) for posted documents of [type], before invoice-level discount. */
     @Query(
         "SELECT COALESCE(SUM(i.lineTotal - i.costTotal),0) FROM transaction_items i " +
             "JOIN transactions t ON t.id = i.transactionId " +
-            "WHERE t.type = 'SALE' AND t.status = 'POSTED' AND t.reversesId IS NULL " +
+            "WHERE t.type = :type AND t.status = 'POSTED' AND t.reversesId IS NULL " +
             "AND t.occurredAt BETWEEN :from AND :to",
     )
-    fun observeLineMargin(from: Long, to: Long): Flow<Long>
+    fun observeLineMargin(type: TransactionType, from: Long, to: Long): Flow<Long>
+
+    @Query(
+        "SELECT COALESCE(SUM(discount),0) FROM transactions WHERE type = :type AND status = 'POSTED' " +
+            "AND reversesId IS NULL AND occurredAt BETWEEN :from AND :to",
+    )
+    fun observeDiscounts(type: TransactionType, from: Long, to: Long): Flow<Long>
+
+    @Query(
+        "SELECT COUNT(*) FROM transactions WHERE type = :type AND status = 'POSTED' " +
+            "AND reversesId IS NULL AND occurredAt BETWEEN :from AND :to",
+    )
+    fun observeCount(type: TransactionType, from: Long, to: Long): Flow<Int>
 }
 
 @Dao
