@@ -88,6 +88,12 @@ class BackupManager @Inject constructor(
 
     private var stagedMeta: JSONObject? = null
 
+    /** After a merge: a freshly installed phone has no shop name yet, so take the one from the backup. */
+    suspend fun adoptShopNameIfMissing() {
+        val name = stagedMeta?.optString("shopName").orEmpty()
+        if (name.isNotBlank() && settings.settings.first().shopName.isBlank()) settings.setShopName(name)
+    }
+
     /**
      * Replaces all current data with the staged backup from [inspect]. The app must restart
      * afterwards (the caller does that), since the open database is closed here.

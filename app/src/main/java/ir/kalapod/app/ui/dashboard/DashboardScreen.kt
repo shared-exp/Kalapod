@@ -50,16 +50,24 @@ fun DashboardScreen(
     onNewPurchase: () -> Unit,
     onOpenInventory: () -> Unit,
     onOpenSuggestions: () -> Unit,
+    onRestoreBackup: () -> Unit = {},
+    onOpenBackup: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val emptyShop by viewModel.emptyShop.collectAsStateWithLifecycle()
+    val backupOff by viewModel.backupOff.collectAsStateWithLifecycle()
     val runningOut by viewModel.runningOut.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.refreshForecast() }
     AnimatedContent(state is DashboardUiState.Ready, label = "dashboard") { ready ->
         if (!ready) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
-            DashboardContent(state as DashboardUiState.Ready, runningOut, onNewSale, onNewPurchase, onOpenInventory, onOpenSuggestions)
+            Column(Modifier.statusBarsPadding()) {
+                if (emptyShop) WelcomeRestoreCard(onRestoreBackup)
+                if (backupOff) BackupReminderCard(onOpenBackup)
+                DashboardContent(state as DashboardUiState.Ready, runningOut, onNewSale, onNewPurchase, onOpenInventory, onOpenSuggestions)
+            }
         }
     }
 }
@@ -78,7 +86,6 @@ private fun DashboardContent(
     Column(
         Modifier
             .fillMaxSize()
-            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -232,6 +239,37 @@ private fun AlertsCard(
                     )
                 }
             }
+        }
+    }
+}
+
+/** Shown on a fresh install: one tap to bring an earlier backup back. */
+@Composable
+private fun WelcomeRestoreCard(onRestore: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("قبلاً از کالاپاد استفاده می‌کردید؟", style = MaterialTheme.typography.titleMedium)
+            Text("اگر نسخه پشتیبان دارید، همه کالاها، فاکتورها و حساب‌ها را برگردانید.", style = MaterialTheme.typography.bodyMedium)
+            Button(onClick = onRestore, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("بازیابی نسخه پشتیبان") }
+        }
+    }
+}
+
+/** All shop data lives on this phone; nudge until daily backup is switched on. */
+@Composable
+private fun BackupReminderCard(onOpen: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("پشتیبان‌گیری خودکار خاموش است", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = onOpen) { Text("روشن کردن") }
         }
     }
 }

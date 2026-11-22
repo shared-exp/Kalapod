@@ -98,6 +98,8 @@ fun KalapodNavHost() {
                     onNewPurchase = { go(TopLevel.PURCHASE.route) },
                     onOpenInventory = { go(TopLevel.INVENTORY.route) },
                     onOpenSuggestions = { nav.navigate("suggestions") },
+                    onRestoreBackup = { nav.navigate("backup?restore=true") },
+                    onOpenBackup = { nav.navigate("backup") },
                 )
             }
             // Screens below are implemented in roadmap steps 1.6–1.8 and 3.3.
@@ -151,7 +153,10 @@ fun KalapodNavHost() {
             composable("suggestions") {
                 OrderSuggestionsScreen(onBack = { nav.popBackStack() }, onGoToPurchase = { nav.popBackStack(); go(TopLevel.PURCHASE.route) })
             }
-            composable("backup") { BackupScreen(onBack = { nav.popBackStack() }) }
+            composable(
+                "backup?restore={restore}",
+                arguments = listOf(navArgument("restore") { type = NavType.BoolType; defaultValue = false }),
+            ) { entry -> BackupScreen(onBack = { nav.popBackStack() }, startRestore = entry.arguments?.getBoolean("restore") == true) }
             composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable("document/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) {
                 DocumentDetailScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("document/$it") })

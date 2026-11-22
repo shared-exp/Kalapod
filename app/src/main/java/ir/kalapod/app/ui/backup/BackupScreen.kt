@@ -63,6 +63,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.LaunchedEffect
+import ir.kalapod.app.core.format.PersianFormat
 import java.io.File
 import javax.inject.Inject
 
@@ -71,8 +74,11 @@ sealed interface BackupBusy {
     data class Working(val what: String) : BackupBusy
     data class Done(val message: String) : BackupBusy
     data class Failed(val message: String) : BackupBusy
-    /** Backup decrypted and checked; waiting for the user to confirm overwriting current data. */
-    data class ConfirmRestore(val info: BackupInfo, val staged: File) : BackupBusy
+    /**
+     * Backup decrypted and checked; waiting for the user's choice. [merge] is null when this phone has
+     * no data yet (plain restore); otherwise it previews adding the backup to the current data.
+     */
+    data class ConfirmRestore(val info: BackupInfo, val staged: File, val merge: ir.kalapod.app.backup.MergeSummary?) : BackupBusy
 }
 
 @HiltViewModel
@@ -80,6 +86,9 @@ class BackupViewModel @Inject constructor(
     @ApplicationContext private val app: Context,
     private val manager: BackupManager,
     private val prefs: BackupPrefs,
+    private val merger: ir.kalapod.app.backup.BackupMerger,
+    private val products: ir.kalapod.app.data.local.dao.ProductDao,
+    private val transactions: ir.kalapod.app.data.local.dao.TransactionDao,
 ) : ViewModel() {
     val settings = prefs.settings.stateIn(viewModelScope, SharingStarted.Eagerly, BackupSettings())
     private val _busy = MutableStateFlow<BackupBusy>(BackupBusy.Idle)
@@ -99,8 +108,11 @@ class BackupViewModel @Inject constructor(
     fun inspect(uri: Uri, password: String) = viewModelScope.launch {
         _busy.value = BackupBusy.Working("در حال بررسی فایل…")
         _busy.value = runCatching {
-            app.contentResolver.openInputStream(uri)!!.use { manager.inspect(it, password.toCharArray()) }
-        }.fold({ BackupBusy.ConfirmRestore(it.first, it.second) }, {
+            val (info, staged) = app.contentResolver.openInputStream(uri)!!.use { manager.inspect(it, password.toCharArray()) }
+            // A phone that already has data gets "add to current data" (nothing is deleted).
+            val hasData = products.observeActive().first().isNotEmpty() || transactions.observeDocuments(null, 1).first().isNotEmpty()
+            BackupBusy.ConfirmRestore(info, staged, if (hasData) merger.preview(staged) else null)
+        }.fold({ it }, {
             BackupBusy.Failed(
                 when (it) {
                     is BackupCrypto.WrongPasswordException, is BackupCrypto.NotABackupException -> it.message.orEmpty()
@@ -118,6 +130,20 @@ class BackupViewModel @Inject constructor(
         Runtime.getRuntime().exit(0)
     }
 
+    fun mergeIn(staged: File) = viewModelScope.launch {
+        _busy.value = BackupBusy.Working("در حال افزودن اطلاعات پشتیبان…")
+        _busy.value = runCatching { merger.merge(staged).also { manager.adoptShopNameIfMissing() } }.fold({ m ->
+            staged.delete()
+            BackupBusy.Done(
+                "اطلاعات پشتیبان اضافه شد.\n" +
+                    "${PersianFormat.number(m.documentsToAdd.toLong())} سند اضافه شد" +
+                    (if (m.documentsAlreadyHere > 0) "، ${PersianFormat.number(m.documentsAlreadyHere.toLong())} سند از قبل بود" else "") + ".\n" +
+                    (if (m.invoicesRenumbered > 0) "${PersianFormat.number(m.invoicesRenumbered.toLong())} فاکتور جدید شماره تازه گرفت (شماره قبلی در توضیح فاکتور هست).\n" else "") +
+                    "موجودی و سود کالاها به ترتیب تاریخ دوباره حساب شد.",
+            )
+        }, { BackupBusy.Failed("افزودن انجام نشد و چیزی تغییر نکرد: ${it.message}") })
+    }
+
     fun setAuto(enabled: Boolean, folder: Uri?) = viewModelScope.launch {
         if (folder != null) {
             app.contentResolver.takePersistableUriPermission(
@@ -133,7 +159,7 @@ class BackupViewModel @Inject constructor(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BackupScreen(onBack: () -> Unit, vm: BackupViewModel = hiltViewModel()) {
+fun BackupScreen(onBack: () -> Unit, startRestore: Boolean = false, vm: BackupViewModel = hiltViewModel()) {
     val s by vm.settings.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     var askPassword by remember { mutableStateOf(false) }
@@ -143,7 +169,9 @@ fun BackupScreen(onBack: () -> Unit, vm: BackupViewModel = hiltViewModel()) {
     val createDoc = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         uri?.let(vm::backupTo)
     }
-    val openDoc = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> restoreUri = uri }
+    val openDoc = rememberLauncherForActivityResult(OpenBackupInDownloads()) { uri -> restoreUri = uri }
+    // Arrived from the welcome card: go straight to picking the file.
+    LaunchedEffect(startRestore) { if (startRestore) openDoc.launch(arrayOf("*/*")) }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) vm.setAuto(true, uri)
     }
@@ -220,16 +248,31 @@ fun BackupScreen(onBack: () -> Unit, vm: BackupViewModel = hiltViewModel()) {
             onDismissRequest = vm::dismiss, confirmButton = { TextButton(onClick = vm::dismiss) { Text("باشه") } },
             text = { Text(b.message, color = MaterialTheme.colorScheme.error) },
         )
-        is BackupBusy.ConfirmRestore -> AlertDialog(
+        is BackupBusy.ConfirmRestore -> if (b.merge == null) AlertDialog(
             onDismissRequest = vm::dismiss,
-            title = { Text("جایگزینی اطلاعات؟") },
+            title = { Text("بازیابی پشتیبان") },
             text = {
-                Text(
-                    "پشتیبان «${b.info.shopName.ifBlank { "فروشگاه" }}» از ${formatDateTime(b.info.createdAt)} سالم است.\n" +
-                        "با بازیابی، همه اطلاعات فعلی این گوشی با آن جایگزین می‌شود و برنامه دوباره باز می‌شود.",
-                )
+                Text("پشتیبان «${b.info.shopName.ifBlank { "فروشگاه" }}» از ${formatDateTime(b.info.createdAt)} سالم است. بازیابی کنیم؟ برنامه بعد از آن دوباره باز می‌شود.")
             },
-            confirmButton = { TextButton(onClick = { vm.restore(b.staged) }) { Text("بازیابی", color = MaterialTheme.colorScheme.error) } },
+            confirmButton = { TextButton(onClick = { vm.restore(b.staged) }) { Text("بازیابی") } },
+            dismissButton = { TextButton(onClick = vm::dismiss) { Text("انصراف") } },
+        ) else AlertDialog(
+            onDismissRequest = vm::dismiss,
+            title = { Text("افزودن پشتیبان به اطلاعات فعلی") },
+            text = {
+                val m = b.merge
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("پشتیبان «${b.info.shopName.ifBlank { "فروشگاه" }}» از ${formatDateTime(b.info.createdAt)}.")
+                    Text("اطلاعات فعلی این گوشی پاک نمی‌شود. این‌ها اضافه می‌شود:", style = MaterialTheme.typography.titleSmall)
+                    Text("• ${PersianFormat.number(m.documentsToAdd.toLong())} سند (فاکتور، مرجوعی، …) با همان تاریخ‌های اصلی")
+                    Text("• کالاها: ${PersianFormat.number(m.productsMatched.toLong())} مشترک، ${PersianFormat.number(m.productsNew.toLong())} جدید")
+                    Text("• مشتری و تأمین‌کننده: ${PersianFormat.number(m.partiesMatched.toLong())} مشترک، ${PersianFormat.number(m.partiesNew.toLong())} جدید")
+                    if (m.invoicesRenumbered > 0) Text("• ${PersianFormat.number(m.invoicesRenumbered.toLong())} فاکتور جدید هم‌شماره با فاکتورهای قدیمی، شماره بعدی را می‌گیرد")
+                    if (m.openingCounts > 0) Text("• موجودی اولیه‌ای که بعد از نصب وارد کردید، به‌عنوان شمارش انبار حساب می‌شود (موجودی دوبار شمرده نمی‌شود)")
+                    if (m.documentsToAdd == 0) Text("همه اسناد این پشتیبان از قبل در گوشی هست.", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.mergeIn(b.staged) }, enabled = b.merge.documentsToAdd > 0 || b.merge.productsNew > 0) { Text("افزودن") } },
             dismissButton = { TextButton(onClick = vm::dismiss) { Text("انصراف") } },
         )
         BackupBusy.Idle -> Unit
@@ -274,4 +317,13 @@ private fun PasswordDialog(title: String, explain: String, confirm: Boolean, onD
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } },
     )
+}
+
+/** File picker that opens in Downloads, where backups usually are (a hint; the user can browse anywhere). */
+class OpenBackupInDownloads : ActivityResultContracts.OpenDocument() {
+    override fun createIntent(context: Context, input: Array<String>): Intent =
+        super.createIntent(context, input).putExtra(
+            android.provider.DocumentsContract.EXTRA_INITIAL_URI,
+            android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download"),
+        )
 }
