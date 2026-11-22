@@ -49,14 +49,17 @@ fun DashboardScreen(
     onNewSale: () -> Unit,
     onNewPurchase: () -> Unit,
     onOpenInventory: () -> Unit,
+    onOpenSuggestions: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val runningOut by viewModel.runningOut.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.refreshForecast() }
     AnimatedContent(state is DashboardUiState.Ready, label = "dashboard") { ready ->
         if (!ready) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
-            DashboardContent(state as DashboardUiState.Ready, onNewSale, onNewPurchase, onOpenInventory)
+            DashboardContent(state as DashboardUiState.Ready, runningOut, onNewSale, onNewPurchase, onOpenInventory, onOpenSuggestions)
         }
     }
 }
@@ -64,9 +67,11 @@ fun DashboardScreen(
 @Composable
 private fun DashboardContent(
     s: DashboardUiState.Ready,
+    runningOut: List<ir.kalapod.app.domain.forecast.ProductForecast>,
     onNewSale: () -> Unit,
     onNewPurchase: () -> Unit,
     onOpenInventory: () -> Unit,
+    onOpenSuggestions: () -> Unit,
 ) {
     val cur = s.settings.currency
     val today = s.data.today
@@ -131,7 +136,7 @@ private fun DashboardContent(
         }
         StatCard("ارزش موجودی انبار", PersianFormat.money(s.data.stockValue, cur), "بر پایه بهای تمام‌شده")
 
-        AlertsCard(s, cur, onOpenInventory)
+        AlertsCard(s, runningOut, onOpenInventory, onOpenSuggestions)
     }
 }
 
@@ -169,8 +174,15 @@ private fun StatCard(
 }
 
 @Composable
-private fun AlertsCard(s: DashboardUiState.Ready, cur: Currency, onOpenInventory: () -> Unit) {
+private fun AlertsCard(
+    s: DashboardUiState.Ready,
+    runningOut: List<ir.kalapod.app.domain.forecast.ProductForecast>,
+    onOpenInventory: () -> Unit,
+    onOpenSuggestions: () -> Unit,
+) {
     val low = s.data.lowStock
+    val lowIds = low.map { it.id }.toSet()
+    val soon = runningOut.filter { it.productId !in lowIds }
     Card(
         Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -178,7 +190,7 @@ private fun AlertsCard(s: DashboardUiState.Ready, cur: Currency, onOpenInventory
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val (icon: ImageVector, tint) = if (low.isEmpty()) {
+                val (icon: ImageVector, tint) = if (low.isEmpty() && soon.isEmpty()) {
                     Icons.Outlined.CheckCircle to MaterialTheme.colorScheme.primary
                 } else {
                     Icons.Outlined.WarningAmber to MaterialTheme.colorScheme.tertiary
@@ -187,9 +199,21 @@ private fun AlertsCard(s: DashboardUiState.Ready, cur: Currency, onOpenInventory
                 Spacer(Modifier.size(8.dp))
                 Text("هشدارها", style = MaterialTheme.typography.titleMedium)
             }
-            if (low.isEmpty()) {
+            soon.take(5).forEach { f ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(f.name, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        f.daysToStockout?.let { d -> if (d < 1) "امروز تمام می‌شود" else "حدود ${PersianFormat.number(d.toLong())} روز دیگر" }.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+            }
+            if (low.isNotEmpty() || soon.isNotEmpty() || runningOut.isNotEmpty()) {
+                TextButton(onClick = onOpenSuggestions) { Text("پیشنهاد خرید") }
+            }
+            if (low.isEmpty() && soon.isEmpty()) {
                 Text("کالای رو به اتمام ندارید.", style = MaterialTheme.typography.bodyMedium)
-            } else {
+            } else if (low.isNotEmpty()) {
                 low.take(5).forEach { p ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(p.name, style = MaterialTheme.typography.bodyMedium)

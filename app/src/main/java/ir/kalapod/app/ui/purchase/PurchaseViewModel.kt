@@ -52,6 +52,7 @@ data class PurchaseState(
 class PurchaseViewModel @Inject constructor(
     private val transactions: TransactionRepository,
     private val products: ProductRepository,
+    private val pending: ir.kalapod.app.ui.forecast.PendingPurchase,
     parties: PartyDao,
     settings: SettingsRepository,
 ) : ViewModel() {
@@ -185,6 +186,20 @@ class PurchaseViewModel @Inject constructor(
                         null -> s.settlement
                     },
                 )
+            }
+        }
+    }
+
+    /** Adds items handed over from the order-suggestions screen (once). */
+    fun consumePending() {
+        val items = pending.items ?: return
+        pending.items = null
+        viewModelScope.launch {
+            val fetched = items.mapNotNull { (id, q) -> products.get(id)?.let { it to q } }
+            edit { s ->
+                var ls = s.lines
+                fetched.forEach { (p, q) -> ls = ls.addOrIncrement(CartLine.of(p, p.lastPurchasePrice, s.currency, q)) }
+                s.copy(lines = ls)
             }
         }
     }

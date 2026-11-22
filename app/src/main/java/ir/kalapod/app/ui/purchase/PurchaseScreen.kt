@@ -147,6 +147,7 @@ fun PurchaseScreen(
         SnackbarHost(snackbar)
     }
 
+    LaunchedEffect(Unit) { vm.consumePending() }
     // Returning from "define product" during a voice session: re-match what was heard.
     LaunchedEffect(Unit) { if (voiceVm.awaitingDefine) { voiceVm.awaitingDefine = false; voiceVm.refreshAfterDefine() } }
     VoiceSheet(

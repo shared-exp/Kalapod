@@ -32,6 +32,8 @@ import ir.kalapod.app.ui.documents.DocumentsScreen
 import ir.kalapod.app.ui.more.MoreScreen
 import ir.kalapod.app.ui.more.MoreEntry
 import ir.kalapod.app.ui.backup.BackupScreen
+import ir.kalapod.app.ui.forecast.OrderSuggestionsScreen
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Backup
 import ir.kalapod.app.ui.reports.ReportsScreen
 import ir.kalapod.app.ui.more.SettingsScreen
@@ -95,6 +97,7 @@ fun KalapodNavHost() {
                     onNewSale = { go(TopLevel.SALE.route) },
                     onNewPurchase = { go(TopLevel.PURCHASE.route) },
                     onOpenInventory = { go(TopLevel.INVENTORY.route) },
+                    onOpenSuggestions = { nav.navigate("suggestions") },
                 )
             }
             // Screens below are implemented in roadmap steps 1.6–1.8 and 3.3.
@@ -127,6 +130,7 @@ fun KalapodNavHost() {
                     onParties = { nav.navigate("parties") },
                     onSettings = { nav.navigate("settings") },
                     extra = listOf(
+                        MoreEntry("پیشنهاد خرید", "چه چیزی، چقدر و کی بخرید", Icons.Outlined.Insights) { nav.navigate("suggestions") },
                         MoreEntry("پشتیبان‌گیری", "نسخه پشتیبان رمزدار، بازیابی، پشتیبان خودکار", Icons.Outlined.Backup) { nav.navigate("backup") },
                     ),
                 )
@@ -144,6 +148,9 @@ fun KalapodNavHost() {
                 arguments = listOf(navArgument("kind") { type = NavType.StringType }, navArgument("id") { type = NavType.LongType }),
             ) { PartyDetailScreen(onBack = { nav.popBackStack() }, onOpenDocument = { nav.navigate("document/$it") }) }
             composable("reports") { ReportsScreen(onBack = { nav.popBackStack() }) }
+            composable("suggestions") {
+                OrderSuggestionsScreen(onBack = { nav.popBackStack() }, onGoToPurchase = { nav.popBackStack(); go(TopLevel.PURCHASE.route) })
+            }
             composable("backup") { BackupScreen(onBack = { nav.popBackStack() }) }
             composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable("document/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) {
