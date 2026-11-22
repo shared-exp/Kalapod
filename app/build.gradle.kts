@@ -31,6 +31,8 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    // Exported Room schemas feed MigrationTestHelper in instrumented tests.
+    sourceSets { getByName("androidTest").assets.srcDir("$projectDir/schemas") }
 }
 
 ksp {

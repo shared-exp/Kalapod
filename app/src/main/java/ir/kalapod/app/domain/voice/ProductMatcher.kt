@@ -1,8 +1,13 @@
 package ir.kalapod.app.domain.voice
 
 /**
- * Matches a spoken product name against the catalog, tolerating speech-recognition noise,
- * colloquial spelling and partial names ("روغن" → "روغن لادن ۱.۵ لیتری" when it's the only oil).
+ * Finds the catalog product a spoken name refers to, tolerating speech-recognition noise:
+ *  - sound-alike letters (ش/چ/ج/ژ, س/ص/ث, ز/ذ/ض/ظ, ت/ط, ح/ه, ک/گ/ق/غ, ا/آ/ع/ء) — «شین شین» → «چین چین»
+ *  - dropped/extra letters (Levenshtein) — «ارنگی» → «فرنگی»
+ *  - partial names — «روغن» → «روغن لادن» when it's the only oil
+ *  - filler words that match nothing in the catalog — «لطفاً»، «همون»
+ *  - names the user already taught it (aliases learned from earlier choices)
+ * It only commits when one product is clearly best; otherwise it asks with the closest options.
  */
 object ProductMatcher {
 
@@ -18,11 +23,18 @@ object ProductMatcher {
         data object None : Match
     }
 
-    private const val SURE = 0.82
-    private const val MIN = 0.5
-    private const val GAP = 0.12
+    private const val SURE = 0.80
+    private const val MIN = 0.50
+    private const val GAP = 0.08
+    /** A spoken word this unlike every catalog word is treated as filler, not as part of the name. */
+    private const val FILLER = 0.55
 
-    fun match(spoken: String, catalog: List<Candidate>): Match {
+    /**
+     * @param aliases learned spoken names → product id, keyed by [fold]; an exact hit wins outright.
+     */
+    fun match(spoken: String, catalog: List<Candidate>, aliases: Map<String, Long> = emptyMap()): Match {
+        val key = fold(spoken)
+        aliases[key]?.let { id -> catalog.firstOrNull { it.id == id }?.let { return Match.Sure(it) } }
         val ranked = rank(spoken, catalog)
         val top = ranked.firstOrNull() ?: return Match.None
         if (top.score < MIN) return Match.None
@@ -37,7 +49,14 @@ object ProductMatcher {
     fun rank(spoken: String, catalog: List<Candidate>): List<Scored> {
         val s = fold(spoken)
         if (s.isBlank()) return emptyList()
-        return catalog.map { Scored(it, score(s, fold(it.name))) }.sortedByDescending { it.score }
+        val folded = catalog.map { it to fold(it.name) }
+        val vocabulary = folded.flatMap { (_, n) -> n.split(' ') }.filter { it.isNotEmpty() }.toSet()
+        // Drop words that look like nothing we sell; keep words that match *some* product (they discriminate).
+        val words = s.split(' ').filter { it.isNotEmpty() }
+        val meaningful = words.filter { w -> vocabulary.maxOfOrNull { similarity(w, it) } ?: 0.0 >= FILLER }
+            .ifEmpty { words }
+        val query = meaningful.joinToString(" ")
+        return folded.map { (c, n) -> Scored(c, score(query, n)) }.sortedByDescending { it.score }
     }
 
     /** 0..1 similarity between two folded names. */
@@ -45,17 +64,24 @@ object ProductMatcher {
         if (spoken == product) return 1.0
         val sTokens = spoken.split(' ').filter { it.isNotEmpty() }
         val pTokens = product.split(' ').filter { it.isNotEmpty() }
-        // How well each spoken word is covered by some product word (handles extra words in the product name).
-        val coverage = sTokens.map { st -> pTokens.maxOfOrNull { similarity(st, it) } ?: 0.0 }.average()
-        // Penalize product names that have many words the user didn't say, but only lightly:
-        // "روغن" should still find "روغن لادن".
-        val reverse = pTokens.map { pt -> sTokens.maxOfOrNull { similarity(pt, it) } ?: 0.0 }.average()
+        if (sTokens.isEmpty() || pTokens.isEmpty()) return 0.0
+        // Every spoken word should be found in the product name…
+        val coverage = sTokens.map { st -> pTokens.maxOf { similarity(st, it) } }.average()
+        // …and, lightly, the product's words should have been said (so the more specific name loses when unsaid).
+        val reverse = pTokens.map { pt -> sTokens.maxOf { similarity(pt, it) } }.average()
         val whole = similarity(spoken.replace(" ", ""), product.replace(" ", ""))
         return maxOf(whole, 0.8 * coverage + 0.2 * reverse)
     }
 
-    /** Normalized Levenshtein similarity. */
+    /** Similarity of two words: plain spelling, or by sound with a small discount. */
     internal fun similarity(a: String, b: String): Double {
+        if (a == b) return 1.0
+        val plain = levenshteinSimilarity(a, b)
+        val bySound = levenshteinSimilarity(sound(a), sound(b)) * 0.97
+        return maxOf(plain, bySound)
+    }
+
+    internal fun levenshteinSimilarity(a: String, b: String): Double {
         if (a == b) return 1.0
         if (a.isEmpty() || b.isEmpty()) return 0.0
         val prev = IntArray(b.length + 1) { it }
@@ -71,8 +97,25 @@ object ProductMatcher {
         return 1.0 - prev[b.length].toDouble() / maxOf(a.length, b.length)
     }
 
-    /** Folds spelling variants that speech recognizers and people mix up. */
-    internal fun fold(name: String): String = PersianText.normalize(name)
+    /** Collapses letters that sound alike (or that recognizers swap) into one representative. */
+    internal fun sound(word: String): String = buildString(word.length) {
+        for (c in word) append(
+            when (c) {
+                'چ', 'ج', 'ژ' -> 'ش'
+                'ص', 'ث' -> 'س'
+                'ذ', 'ض', 'ظ' -> 'ز'
+                'ط' -> 'ت'
+                'ح' -> 'ه'
+                'گ', 'ق', 'غ' -> 'ک'
+                'آ', 'ع', 'ء', 'أ', 'إ' -> 'ا'
+                'ئ' -> 'ی'
+                else -> c
+            },
+        )
+    }
+
+    /** Normal form for comparing names (also the key for learned aliases). */
+    fun fold(name: String): String = PersianText.normalize(name)
         .replace(",", " ")
         .replace('آ', 'ا')
         .replace("ئ", "ی")
@@ -83,8 +126,8 @@ object ProductMatcher {
 
     private val noise = setOf("لیتری", "گرمی", "کیلویی", "عددی", "بسته", "بزرگ", "کوچک", "متوسط", "تا", "عدد", "دونه")
     private val colloquial = mapOf(
-        "نوشابه" to "نوشابه", "نوشابع" to "نوشابه", "ماکارانی" to "ماکارونی", "ماکارنی" to "ماکارونی",
-        "پنیر" to "پنیر", "رب" to "رب", "روغان" to "روغن", "شیر" to "شیر", "تخم مرغ" to "تخم‌مرغ", "تخممرغ" to "تخم‌مرغ",
-        "چایی" to "چای", "قند" to "قند", "شکر" to "شکر", "برنج" to "برنج", "اب" to "اب", "ماس" to "ماست",
+        "نوشابع" to "نوشابه", "ماکارانی" to "ماکارونی", "ماکارنی" to "ماکارونی",
+        "روغان" to "روغن", "تخممرغ" to "تخم‌مرغ", "چایی" to "چای", "ماس" to "ماست",
+        "فرنگ" to "فرنگی", "گوجهفرنگی" to "گوجه فرنگی",
     )
 }

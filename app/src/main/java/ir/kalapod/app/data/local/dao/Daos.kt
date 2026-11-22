@@ -11,6 +11,7 @@ import ir.kalapod.app.data.local.entity.CustomerEntity
 import ir.kalapod.app.data.local.entity.InventoryMovementEntity
 import ir.kalapod.app.data.local.entity.InvoiceEntity
 import ir.kalapod.app.data.local.entity.PaymentEntity
+import ir.kalapod.app.data.local.entity.ProductAliasEntity
 import ir.kalapod.app.data.local.entity.ProductBarcodeEntity
 import ir.kalapod.app.data.local.entity.ProductEntity
 import ir.kalapod.app.data.local.entity.SettingEntity
@@ -335,3 +336,10 @@ interface ReportDao {
 }
 
 data class ProductName(val id: Long, val name: String)
+
+@Dao
+interface AliasDao {
+    @Query("SELECT * FROM product_aliases") suspend fun all(): List<ProductAliasEntity>
+    /** Re-teaching the same words points them at the newly chosen product. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(a: ProductAliasEntity): Long
+}

@@ -13,6 +13,8 @@ class VoiceResolverTest {
         CatalogProduct(3, "برنج طارم", ProductUnit.KILOGRAM, 1_500_000, 1_300_000),
         CatalogProduct(4, "ماکارونی زر", ProductUnit.PACK, 300_000, 250_000),
         CatalogProduct(5, "زعفران", ProductUnit.GRAM, 50_000, 40_000),
+        CatalogProduct(6, "رب گوجه فرنگی چین چین", ProductUnit.PIECE, 350_000, 300_000),
+        CatalogProduct(7, "رب گوجه فرنگی تبرک", ProductUnit.PIECE, 330_000, 280_000),
     )
 
     private fun resolve(s: String, purchase: Boolean = false) =
@@ -58,5 +60,18 @@ class VoiceResolverTest {
         val chosen = VoiceResolver.choose(lines[0], catalog[2], forPurchase = false)
         assertEquals(3L, chosen.product?.id)
         assertEquals(1_000L, chosen.quantityMilli)
+    }
+
+    @Test fun misheardBrandStillFindsTheProduct() {
+        val l = resolve("دو تا رب گوجه ارنگی شین شین فروختم").single()
+        assertEquals(6L, l.product?.id)
+        assertEquals(2_000L, l.quantityMilli)
+    }
+
+    @Test fun learnedAliasSkipsTheQuestion() {
+        val cmd = VoiceCommandParser.parse("یه رب گوجه فروختم")
+        assertTrue(VoiceResolver.resolve(cmd, catalog, false).single().needsChoice)
+        val learned = mapOf(ProductMatcher.fold("رب گوجه") to 7L)
+        assertEquals(7L, VoiceResolver.resolve(cmd, catalog, false, learned).single().product?.id)
     }
 }

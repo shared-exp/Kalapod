@@ -207,3 +207,19 @@ data class SettingEntity(
     @PrimaryKey @ColumnInfo(name = "key") val key: String,
     val value: String,
 )
+
+/**
+ * A spoken name the user confirmed for a product (e.g. «رب شین» → «رب گوجه فرنگی چین چین»).
+ * [alias] is ProductMatcher.fold(heard name); next time the same words match instantly.
+ */
+@Entity(
+    tableName = "product_aliases",
+    foreignKeys = [ForeignKey(ProductEntity::class, ["id"], ["productId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["alias"], unique = true), Index("productId")],
+)
+data class ProductAliasEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val alias: String,
+    val productId: Long,
+    val createdAt: Long,
+)

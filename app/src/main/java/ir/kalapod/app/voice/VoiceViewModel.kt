@@ -44,6 +44,7 @@ class VoiceViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val offline: OfflineModelManager,
     private val products: ProductDao,
+    private val aliases: ir.kalapod.app.data.local.dao.AliasDao,
 ) : ViewModel() {
     private val _phase = MutableStateFlow<VoicePhase>(VoicePhase.Idle)
     val phase: StateFlow<VoicePhase> = _phase.asStateFlow()
@@ -128,7 +129,8 @@ class VoiceViewModel @Inject constructor(
             val catalog = products.observeActive().first().map {
                 CatalogProduct(it.id, it.name, it.unit, it.salePrice, it.lastPurchasePrice)
             }
-            val lines = VoiceResolver.resolve(cmd, catalog, forPurchase)
+            val learned = aliases.all().associate { it.alias to it.productId }
+            val lines = VoiceResolver.resolve(cmd, catalog, forPurchase, learned)
             _phase.value = if (lines.isEmpty()) {
                 VoicePhase.Error("کالایی در جمله پیدا نشد: «$text»")
             } else {
@@ -141,6 +143,11 @@ class VoiceViewModel @Inject constructor(
         val r = _phase.value as? VoicePhase.Review ?: return
         val p = r.lines[index].options.firstOrNull { it.id == productId } ?: return
         _phase.value = r.copy(lines = r.lines.toMutableList().also { it[index] = VoiceResolver.choose(it[index], p, forPurchase) })
+        // Remember: these exact words mean this product next time (fewer questions, fewer mistakes).
+        val heard = ir.kalapod.app.domain.voice.ProductMatcher.fold(r.lines[index].heard.name)
+        if (heard.isNotBlank()) viewModelScope.launch {
+            aliases.put(ir.kalapod.app.data.local.entity.ProductAliasEntity(alias = heard, productId = p.id, createdAt = System.currentTimeMillis()))
+        }
     }
 
     fun drop(index: Int) {

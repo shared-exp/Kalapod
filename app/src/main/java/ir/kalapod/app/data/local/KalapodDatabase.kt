@@ -32,8 +32,9 @@ import ir.kalapod.app.data.local.entity.TransactionItemEntity
         CustomerEntity::class, SupplierEntity::class,
         TransactionEntity::class, TransactionItemEntity::class, InventoryMovementEntity::class,
         InvoiceEntity::class, PaymentEntity::class, StockAlertEntity::class, SettingEntity::class,
+        ir.kalapod.app.data.local.entity.ProductAliasEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -48,8 +49,25 @@ abstract class KalapodDatabase : RoomDatabase() {
     abstract fun paymentDao(): PaymentDao
     abstract fun stockAlertDao(): StockAlertDao
     abstract fun settingDao(): SettingDao
+    abstract fun aliasDao(): ir.kalapod.app.data.local.dao.AliasDao
     abstract fun reportDao(): ir.kalapod.app.data.local.dao.ReportDao
     abstract fun balanceDao(): ir.kalapod.app.data.local.dao.BalanceDao
 
-    companion object { const val NAME = "kalapod.db" }
+    companion object {
+        const val NAME = "kalapod.db"
+
+        /** v2: learned voice aliases. Every future schema change gets its own migration — never destructive. */
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `product_aliases` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`alias` TEXT NOT NULL, `productId` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                        "FOREIGN KEY(`productId`) REFERENCES `products`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_product_aliases_alias` ON `product_aliases` (`alias`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_product_aliases_productId` ON `product_aliases` (`productId`)")
+            }
+        }
+        val MIGRATIONS = arrayOf(MIGRATION_1_2)
+    }
 }

@@ -34,11 +34,15 @@ data class ResolvedLine(
  */
 object VoiceResolver {
 
-    fun resolve(cmd: ParsedCommand, catalog: List<CatalogProduct>, forPurchase: Boolean): List<ResolvedLine> {
+    /** @param aliases learned spoken names (ProductMatcher.fold) → product id. */
+    fun resolve(
+        cmd: ParsedCommand, catalog: List<CatalogProduct>, forPurchase: Boolean,
+        aliases: Map<String, Long> = emptyMap(),
+    ): List<ResolvedLine> {
         val candidates = catalog.map { ProductMatcher.Candidate(it.id, it.name) }
         val byId = catalog.associateBy { it.id }
         return cmd.items.filter { it.name.isNotBlank() }.map { item ->
-            when (val m = ProductMatcher.match(item.name, candidates)) {
+            when (val m = ProductMatcher.match(item.name, candidates, aliases)) {
                 is ProductMatcher.Match.Sure -> fit(item, byId.getValue(m.candidate.id), forPurchase)
                 is ProductMatcher.Match.Ambiguous -> ResolvedLine(
                     item, null, m.options.map { byId.getValue(it.id) },

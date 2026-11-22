@@ -15,7 +15,9 @@ import javax.inject.Singleton
 object DatabaseModule {
     @Provides @Singleton
     fun db(@ApplicationContext ctx: Context): KalapodDatabase =
-        Room.databaseBuilder(ctx, KalapodDatabase::class.java, KalapodDatabase.NAME).build()
+        Room.databaseBuilder(ctx, KalapodDatabase::class.java, KalapodDatabase.NAME)
+            .addMigrations(*KalapodDatabase.MIGRATIONS)
+            .build()
 
     @Provides fun categoryDao(db: KalapodDatabase) = db.categoryDao()
     @Provides fun productDao(db: KalapodDatabase) = db.productDao()
@@ -28,5 +30,6 @@ object DatabaseModule {
     @Provides fun stockAlertDao(db: KalapodDatabase) = db.stockAlertDao()
     @Provides fun settingDao(db: KalapodDatabase) = db.settingDao()
     @Provides fun balanceDao(db: KalapodDatabase) = db.balanceDao()
+    @Provides fun aliasDao(db: KalapodDatabase) = db.aliasDao()
     @Provides fun reportDao(db: KalapodDatabase) = db.reportDao()
 }
