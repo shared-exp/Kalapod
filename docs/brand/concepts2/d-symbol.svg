@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>Kalapod — Ledger Box</title>
+  <!-- D · Ledger Box: a carton (goods/stock) opened like a book; the front is a ledger page with
+       rows and a short total line — goods that get recorded. Body 160x112 r14; flaps open at 30°. -->
+  <g transform="translate(0 -5)">
+  <path fill="#000" fill-rule="evenodd" d="M62 112 H194 A14 14 0 0 1 208 126 V210 A14 14 0 0 1 194 224 H62 A14 14 0 0 1 48 210 V126 A14 14 0 0 1 62 112 Z M85.0 132 H171.0 A7.0 7.0 0 0 1 171.0 146 H85.0 A7.0 7.0 0 0 1 85.0 132 Z M85.0 158 H171.0 A7.0 7.0 0 0 1 171.0 172 H85.0 A7.0 7.0 0 0 1 85.0 158 Z M85.0 184 H129.0 A7.0 7.0 0 0 1 129.0 198 H85.0 A7.0 7.0 0 0 1 85.0 184 Z"/>
+  <path fill="#000" d="M54 102 H124 L108 46 Q106 40 100 42 L40 60 Q34 62 36 68 Z"/>
+  <path fill="#000" d="M202 102 H132 L148 46 Q150 40 156 42 L216 60 Q222 62 220 68 Z"/>
+  </g>
+</svg>

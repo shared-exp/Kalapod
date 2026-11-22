@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>Kalapod — Swap Box</title>
+  <!-- E · Swap Box: one carton split in two halves, one raised, one lowered — goods coming in
+       (purchase) and going out (sale) through the same stock. Halves 84x132 r18, gap 8, offset 32. -->
+  <path fill="#000" fill-rule="evenodd" d="M58 46 H106 A18 18 0 0 1 124 64 V160 A18 18 0 0 1 106 178 H58 A18 18 0 0 1 40 160 V64 A18 18 0 0 1 58 46 Z M150 78 H198 A18 18 0 0 1 216 96 V192 A18 18 0 0 1 198 210 H150 A18 18 0 0 1 132 192 V96 A18 18 0 0 1 150 78 Z
+    M66 104 L82 88 L98 104 L90 112 L82 104 L74 112 Z
+    M158 152 L174 168 L190 152 L182 144 L174 152 L166 144 Z"/>
+</svg>
