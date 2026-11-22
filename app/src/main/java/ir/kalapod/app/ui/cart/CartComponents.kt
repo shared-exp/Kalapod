@@ -105,7 +105,7 @@ fun ProductPickerSheet(
     currency: Currency,
     showPurchasePrice: Boolean,
     onPick: (ProductEntity) -> Unit,
-    onCreateNew: () -> Unit,
+    onCreateNew: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -115,9 +115,11 @@ fun ProductPickerSheet(
                 leadingIcon = { Icon(Icons.Outlined.Search, null) }, singleLine = true,
                 modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
             )
-            OutlinedButton(onClick = onCreateNew, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Icon(Icons.Outlined.Add, null)
-                Text("تعریف کالای جدید")
+            if (onCreateNew != null) {
+                OutlinedButton(onClick = onCreateNew, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Icon(Icons.Outlined.Add, null)
+                    Text("تعریف کالای جدید")
+                }
             }
             LazyColumn(Modifier.heightIn(max = 480.dp)) {
                 items(products, key = { it.id }) { p ->

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Settings
@@ -30,8 +31,15 @@ import androidx.compose.ui.unit.dp
 data class MoreEntry(val title: String, val subtitle: String, val icon: ImageVector, val onClick: () -> Unit)
 
 @Composable
-fun MoreScreen(onDocuments: () -> Unit, onParties: () -> Unit, onSettings: () -> Unit, extra: List<MoreEntry> = emptyList()) {
+fun MoreScreen(
+    onReports: () -> Unit,
+    onDocuments: () -> Unit,
+    onParties: () -> Unit,
+    onSettings: () -> Unit,
+    extra: List<MoreEntry> = emptyList(),
+) {
     val entries = listOf(
+        MoreEntry("گزارش‌ها", "فروش، سود، پرفروش‌ها و نمودار", Icons.Outlined.BarChart, onReports),
         MoreEntry("فاکتورها و اسناد", "همه خریدها، فروش‌ها و مرجوعی‌ها", Icons.Outlined.ReceiptLong, onDocuments),
         MoreEntry("مشتریان و تأمین‌کنندگان", "حساب‌ها، نسیه‌ها، دریافت و پرداخت", Icons.Outlined.People, onParties),
     ) + extra + MoreEntry("تنظیمات", "نام فروشگاه، واحد پول، ظاهر", Icons.Outlined.Settings, onSettings)

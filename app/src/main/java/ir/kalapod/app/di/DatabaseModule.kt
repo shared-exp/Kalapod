@@ -28,4 +28,5 @@ object DatabaseModule {
     @Provides fun stockAlertDao(db: KalapodDatabase) = db.stockAlertDao()
     @Provides fun settingDao(db: KalapodDatabase) = db.settingDao()
     @Provides fun balanceDao(db: KalapodDatabase) = db.balanceDao()
+    @Provides fun reportDao(db: KalapodDatabase) = db.reportDao()
 }

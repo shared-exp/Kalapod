@@ -297,3 +297,41 @@ interface BalanceDao {
     @Query("SELECT * FROM customers WHERE id = :id") suspend fun customer(id: Long): CustomerEntity?
     @Query("SELECT * FROM suppliers WHERE id = :id") suspend fun supplier(id: Long): SupplierEntity?
 }
+
+/** One sold/returned line with what's needed for revenue, cost and discount share. */
+data class SaleLineRow(
+    val type: TransactionType,
+    val occurredAt: Long,
+    val productId: Long,
+    val productName: String,
+    val quantityMilli: Long,
+    val lineTotal: Long,
+    val costTotal: Long,
+    val txSubtotal: Long,
+    val txDiscount: Long,
+)
+
+data class DocTotalRow(val type: TransactionType, val total: Long, val occurredAt: Long)
+
+@Dao
+interface ReportDao {
+    @Query(
+        "SELECT t.type, t.occurredAt, i.productId, p.name AS productName, i.quantityMilli, i.lineTotal, i.costTotal, " +
+            "t.subtotal AS txSubtotal, t.discount AS txDiscount " +
+            "FROM transaction_items i JOIN transactions t ON t.id = i.transactionId JOIN products p ON p.id = i.productId " +
+            "WHERE t.type IN ('SALE','SALE_RETURN') AND t.status = 'POSTED' AND t.reversesId IS NULL " +
+            "AND t.occurredAt BETWEEN :from AND :to AND (:productId IS NULL OR i.productId = :productId)",
+    )
+    suspend fun saleLines(from: Long, to: Long, productId: Long?): List<SaleLineRow>
+
+    @Query(
+        "SELECT type, total, occurredAt FROM transactions WHERE status = 'POSTED' AND reversesId IS NULL " +
+            "AND occurredAt BETWEEN :from AND :to",
+    )
+    suspend fun docTotals(from: Long, to: Long): List<DocTotalRow>
+
+    @Query("SELECT id, name FROM products WHERE isArchived = 0")
+    suspend fun activeProducts(): List<ProductName>
+}
+
+data class ProductName(val id: Long, val name: String)
