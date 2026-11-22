@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- B · Pistachio Kaf: the Persian letter ک; its diagonal "sarkesh" is a pistachio pod.
+       Body: 28-wide stroke with round ends, built as an outline path. -->
+  <g fill="#000">
+    <!-- body: right stem down, baseline left, upturn at the left end -->
+    <path d="M184 92 a14 14 0 0 1 28 0 V196 a14 14 0 0 1 -14 14 H72 c-24 0 -38 -16 -38 -38 v-12 a14 14 0 0 1 28 0 v12 c0 7 4 10 10 10 H184 Z"/>
+    <!-- sarkesh as a pod: lens from upper-right to lower-left, 30° -->
+    <path d="M214 40 C 196 82 150 108 104 112 C 120 78 164 46 214 40 Z"/>
+  </g>
+</svg>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- A · Voice Shelf: a speech bubble (the assistant you talk to) whose cut-out bars are goods standing
+       on a shelf and, at the same time, a spoken waveform. Bubble 184x150 r40, bars 22 wide / 14 gap, common baseline y160. -->
+  <path fill="#000" fill-rule="evenodd" d="M76 40 H180 A40 40 0 0 1 220 80 V150 A40 40 0 0 1 180 190 H100 L54 226 L64 188 A40 40 0 0 1 36 150 V80 A40 40 0 0 1 76 40 Z M74.0 118 A11.0 11.0 0 0 1 85 129.0 V149.0 A11.0 11.0 0 0 1 63 149.0 V129.0 A11.0 11.0 0 0 1 74.0 118 Z M110.0 76 A11.0 11.0 0 0 1 121 87.0 V149.0 A11.0 11.0 0 0 1 99 149.0 V87.0 A11.0 11.0 0 0 1 110.0 76 Z M146.0 100 A11.0 11.0 0 0 1 157 111.0 V149.0 A11.0 11.0 0 0 1 135 149.0 V111.0 A11.0 11.0 0 0 1 146.0 100 Z M182.0 62 A11.0 11.0 0 0 1 193 73.0 V149.0 A11.0 11.0 0 0 1 171 149.0 V73.0 A11.0 11.0 0 0 1 182.0 62 Z"/>
+</svg>

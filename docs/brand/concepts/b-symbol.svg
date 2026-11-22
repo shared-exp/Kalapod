@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>Kalapod — Pistachio Kaf</title>
+  <g transform="translate(-12 13)">
+  <!-- B · Pistachio Kaf: geometric Persian ک (bowl base, inner chevron) whose rising stroke swells into
+       a pistachio pod and tapers to a point. Stroke 26; the pod base equals the stroke width, so the join is seamless. -->
+  <path fill="none" stroke="#000" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"
+        d="M54 112 V158 Q54 198 94 198 H168 Q206 198 206 166 Q206 148 186 136 L146 112.9"/>
+  <path fill="#000" d="M155 121.3 Q205 100 226 32 Q153 50 137 102.7 A13 13 0 0 0 155 121.3 Z"/>
+  </g>
+</svg>

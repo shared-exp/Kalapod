@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- A · Shelf-Wave: five goods on a shelf that also read as a voice waveform.
+       Grid unit 2px; bars 26 wide, 12 gap, r13; shelf 176x20 r10. Heights fall right→left like speech, not a mirror EQ. -->
+  <g fill="#000">
+    <rect x="40" y="190" width="176" height="22" rx="11"/>
+    <rect x="190" y="52"  width="26" height="126" rx="13"/>
+    <rect x="152" y="86"  width="26" height="92"  rx="13"/>
+    <rect x="114" y="66"  width="26" height="112" rx="13"/>
+    <rect x="76"  y="112" width="26" height="66"  rx="13"/>
+    <rect x="40"  y="138" width="26" height="40"  rx="13"/>
+  </g>
+</svg>

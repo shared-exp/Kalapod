@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>Kalapod — Voice Shelf</title>
+  <g transform="translate(0 -5)">
+  <!-- A · Voice Shelf: a speech bubble whose cut-out bars are goods on a shelf and a spoken waveform.
+       Bubble 184x150 r40; bars 22/14, shared baseline y160; heights 46-96-66-82 (speech rhythm, not a rising chart). -->
+  <path fill="#000" fill-rule="evenodd" d="M76 40 H180 A40 40 0 0 1 220 80 V150 A40 40 0 0 1 180 190 H100 L54 226 L64 188 A40 40 0 0 1 36 150 V80 A40 40 0 0 1 76 40 Z M74.0 114 A11.0 11.0 0 0 1 85 125.0 V149.0 A11.0 11.0 0 0 1 63 149.0 V125.0 A11.0 11.0 0 0 1 74.0 114 Z M110.0 64 A11.0 11.0 0 0 1 121 75.0 V149.0 A11.0 11.0 0 0 1 99 149.0 V75.0 A11.0 11.0 0 0 1 110.0 64 Z M146.0 94 A11.0 11.0 0 0 1 157 105.0 V149.0 A11.0 11.0 0 0 1 135 149.0 V105.0 A11.0 11.0 0 0 1 146.0 94 Z M182.0 78 A11.0 11.0 0 0 1 193 89.0 V149.0 A11.0 11.0 0 0 1 171 149.0 V89.0 A11.0 11.0 0 0 1 182.0 78 Z"/>
+  </g>
+</svg>

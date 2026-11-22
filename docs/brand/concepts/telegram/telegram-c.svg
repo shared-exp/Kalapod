@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width="640" height="640">
+  <rect width="640" height="640" fill="#3F5F2A"/>
+  <g transform="translate(320 316) scale(1.5) translate(-128 -128)"><g transform="translate(-5.6 -3)">
+  <!-- C · Tick Pod: a pistachio shell (pointed, slim, leaning 16°) split open by an upright check mark:
+       goods, counted and recorded. Tick = 22-wide negative stroke (evenodd hole), 45° arms. -->
+  <path fill="#FBF8F1" fill-rule="evenodd" d="M99.3 28.0 C 152.9 33.5 204.4 118.6 201.4 173.5 C 195.9 212.5 118.2 239.0 90.4 207.4 C 58.0 166.8 54.6 67.9 99.3 28.0 Z
+    M82 140 L97.6 124.4 L120 146.8 L164.4 102.4 L180 118 L120 178 Z"/>
+  </g></g>
+</svg>

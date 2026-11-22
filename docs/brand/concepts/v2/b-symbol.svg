@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- B · Pistachio Kaf: a geometric Persian ک (bowl base, inner chevron, rising diagonal) whose rising
+       stroke ends in a pistachio pod. Built on the real ک skeleton (checked against Vazirmatn). Stroke 26, round joins. -->
+  <path fill="none" stroke="#000" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"
+        d="M54 112 V158 Q54 198 94 198 H168 Q206 198 206 166 Q206 148 186 136 L146 112"/>
+  <path fill="#000" d="M136 122 Q206 104 226 34 Q160 50 136 122 Z"/>
+</svg>

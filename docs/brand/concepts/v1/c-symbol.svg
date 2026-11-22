@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- C · Tick Pod: a pod (pistachio/seed) split open by a check mark: "it's recorded".
+       Pod = vertical lens 152 wide; tick = 22-wide negative stroke (evenodd hole). -->
+  <path fill="#000" fill-rule="evenodd" d="
+    M128 28 C 214 52 214 204 128 228 C 42 204 42 52 128 28 Z
+    M80 134 L95.6 118.4 L118 140.8 L162.4 96.4 L178 112 L118 172 Z"/>
+</svg>
