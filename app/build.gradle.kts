@@ -84,3 +84,21 @@ dependencies {
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.room.testing)
 }
+
+// After every build, put the installable APK in the project's main folder (e.g. Kalapod/Kalapod-debug.apk),
+// so it's easy to find and copy to a phone. Covers assemble*, install* and any task that packages an APK.
+listOf("debug", "release").forEach { type ->
+    val cap = type.replaceFirstChar { it.uppercase() }
+    val copy = tasks.register("copy${cap}ApkToRoot") {
+        val apkDir = layout.buildDirectory.dir("outputs/apk/$type")
+        val target = rootProject.layout.projectDirectory.file("Kalapod-$type.apk").asFile
+        doLast {
+            val apk = apkDir.get().asFile.listFiles { f -> f.extension == "apk" }?.maxByOrNull { it.lastModified() }
+            if (apk != null) {
+                apk.copyTo(target, overwrite = true)
+                println("APK → ${target.absolutePath}")
+            }
+        }
+    }
+    afterEvaluate { tasks.findByName("package$cap")?.finalizedBy(copy) }
+}
