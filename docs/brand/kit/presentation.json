@@ -1,0 +1,30 @@
+{
+  "brand": "کالاپاد · Kalapod",
+  "tagline": "ثبت خرید و فروش، به سادگی یک جمله",
+  "brief": "Android app that replaces the shop's paper ledger: record purchases and sales by voice, barcode or by hand; stock, invoices and reports. For supermarket, grocery and nut-shop owners who are not accountants.",
+  "adjectives": ["simple", "trustworthy", "warm", "fast", "Iranian"],
+  "criteria": "Distinct from cart/bag/tag/barcode clichés; says 'recorded' at a glance; works at 16 px, in one colour and reversed; fits a warm cream + olive app.",
+  "mockups": ["app-icon", "signage", "social", "box", "business-card", "favicon-tab"],
+  "nav": ["امکانات", "قیمت", "دانلود"],
+  "brand_color": "#3F5F2A",
+  "tile_color": "#3F5F2A",
+  "greyscale": false,
+  "designer": "Kalapod",
+  "round": 2,
+  "concepts": [
+    {
+      "name": "Tally — چوب‌خط",
+      "symbol": "symbol.svg",
+      "lockup": "lockup-horizontal.svg",
+      "idea": "Four tally strokes — the oldest way to count stock — closed by a check mark instead of a slash: counted and recorded.",
+      "rationale": [
+        "Says the product's promise, 'it's recorded', without drawing a cart or a ledger",
+        "The strokes double as goods side by side on a shelf",
+        "The wordmark's alefs end in the same round caps as the strokes",
+        "True negative-space gutter: works on cream, olive, black and white"
+      ]
+    }
+  ],
+  "recommendation": "Tally: approved direction. Master + small-size cut, cream/olive palette, horizontal and stacked lockups.",
+  "next_steps": ["Use the files in export/", "Register the trademark after a professional search", "Commission a fully custom wordmark later if desired"]
+}
