@@ -53,6 +53,7 @@ import ir.kalapod.app.ui.cart.SummaryRow
 import ir.kalapod.app.ui.common.formatDateTime
 import ir.kalapod.app.ui.common.label
 import kotlinx.coroutines.launch
+import ir.kalapod.app.data.pdf.InvoiceActions
 import ir.kalapod.app.domain.voice.VoiceOperation
 import ir.kalapod.app.voice.VoiceButton
 import ir.kalapod.app.voice.VoiceSheet
@@ -70,13 +71,14 @@ fun DocumentDetailScreen(
     var showReturn by remember { mutableStateOf(false) }
     var showReverse by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(s.message) { s.message?.let { snackbar.showSnackbar(it); vm.clearMessage() } }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(s.detail?.let { it.tx.type.label + " " + PersianFormat.digits(it.invoiceNumber.orEmpty()) } ?: "") },
+                title = { Text(s.detail?.let { it.tx.type.label + " " + PersianFormat.ltr(it.invoiceNumber.orEmpty()) } ?: "") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "بازگشت") } },
             )
         },
@@ -148,6 +150,16 @@ fun DocumentDetailScreen(
                         }
                     }
                 }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(
+                    onClick = { scope.launch { runCatching { vm.pdf() }.onSuccess { InvoiceActions.share(context, it, "فاکتور") } } },
+                    modifier = Modifier.weight(1f),
+                ) { Text("ارسال PDF") }
+                FilledTonalButton(
+                    onClick = { scope.launch { runCatching { vm.pdf() }.onSuccess { InvoiceActions.print(context, it, it.nameWithoutExtension) } } },
+                    modifier = Modifier.weight(1f),
+                ) { Text("چاپ") }
             }
             if (d.canReturn) {
                 FilledTonalButton(onClick = { vm.startReturn(); showReturn = true }, modifier = Modifier.fillMaxWidth()) {

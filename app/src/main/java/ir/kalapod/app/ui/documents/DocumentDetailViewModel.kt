@@ -19,6 +19,7 @@ import ir.kalapod.app.data.repository.ReturnLine
 import ir.kalapod.app.data.repository.TransactionRepository
 import ir.kalapod.app.data.settings.SettingsRepository
 import ir.kalapod.app.domain.finance.Money
+import ir.kalapod.app.ui.common.label
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,6 +64,7 @@ class DocumentDetailViewModel @Inject constructor(
     private val db: KalapodDatabase,
     private val repo: TransactionRepository,
     private val settings: SettingsRepository,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
     private val id: Long = savedState["id"] ?: 0L
     private val _state = MutableStateFlow(DetailState())
@@ -156,6 +158,30 @@ class DocumentDetailViewModel @Inject constructor(
         is PostResult.Posted, is PostResult.AlreadyPosted -> { done("سند باطل شد."); true }
         is PostResult.Invalid -> { fail(r.message); false }
         is PostResult.InsufficientStock -> false
+    }
+
+    /** Builds (or rebuilds) this document's PDF in the cache and returns it. */
+    suspend fun pdf(): java.io.File = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val d = _state.value.detail ?: error("not loaded")
+        val st = settings.settings.first()
+        val isPurchaseSide = d.tx.type == TransactionType.PURCHASE || d.tx.type == TransactionType.PURCHASE_RETURN
+        val paid = d.payments.sumOf { if ((it.direction == ir.kalapod.app.data.local.entity.PaymentDirection.IN) != isPurchaseSide) it.amount else -it.amount }
+            .let { if (d.tx.type == TransactionType.SALE_RETURN || d.tx.type == TransactionType.PURCHASE_RETURN) -it else it }
+        val data = ir.kalapod.app.data.pdf.InvoiceData(
+            shopName = st.shopName,
+            title = "فاکتور " + d.tx.type.label,
+            number = d.invoiceNumber.orEmpty(),
+            dateText = ir.kalapod.app.ui.common.formatDateTime(d.tx.occurredAt),
+            partyLabel = if (isPurchaseSide) "تأمین‌کننده" else "مشتری",
+            partyName = d.partyName,
+            lines = d.items.map {
+                ir.kalapod.app.data.pdf.InvoiceData.Line(it.productName, it.item.quantityMilli, it.unit.label, it.item.unitPrice, it.item.lineTotal)
+            },
+            subtotal = d.tx.subtotal, discount = d.tx.discount, extraCost = d.tx.extraCost, total = d.tx.total,
+            paid = paid.coerceIn(0, d.tx.total), reversed = d.tx.status == TransactionStatus.REVERSED, currency = st.currency,
+        )
+        val name = (d.invoiceNumber ?: "doc-${d.tx.id}").replace(Regex("[^A-Za-z0-9-]"), "_")
+        ir.kalapod.app.data.pdf.InvoicePdf.write(appContext, data, java.io.File(appContext.cacheDir, "invoices/$name.pdf"))
     }
 
     fun clearMessage() = _state.update { it.copy(message = null) }

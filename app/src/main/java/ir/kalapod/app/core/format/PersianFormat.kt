@@ -48,6 +48,12 @@ object PersianFormat {
         return digits(sign) + if (frac.isEmpty()) wholeStr else "$wholeStr$DECIMAL_SEP${digits(frac)}"
     }
 
+    /**
+     * Isolates a left-to-right code (invoice number, barcode) inside RTL text so the bidi algorithm
+     * doesn't scramble it ("S-1405-000012" would otherwise show as "000012-1405-S").
+     */
+    fun ltr(s: String): String = "⁦" + toAsciiDigits(s) + "⁩" // Latin digits are strongly LTR
+
     fun date(d: JalaliDate): String = digits(d.toString())
 
     fun longDate(d: JalaliDate): String =

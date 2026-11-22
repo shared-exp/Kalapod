@@ -205,7 +205,7 @@ fun UnknownBarcodeDialog(code: String, onDefine: () -> Unit, onDismiss: () -> Un
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("کالای ناشناخته") },
-        text = { Text("بارکد ${PersianFormat.digits(code)} هنوز برای هیچ کالایی ثبت نشده است. همین حالا تعریفش کنید؟") },
+        text = { Text("بارکد ${PersianFormat.ltr(code)} هنوز برای هیچ کالایی ثبت نشده است. همین حالا تعریفش کنید؟") },
         confirmButton = { androidx.compose.material3.TextButton(onClick = onDefine) { Text("تعریف کالا") } },
         dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("بعداً") } },
     )

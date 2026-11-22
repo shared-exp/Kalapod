@@ -74,7 +74,7 @@ fun PurchaseScreen(
 
     LaunchedEffect(s.lastPosted) {
         s.lastPosted?.let {
-            snackbar.showSnackbar("خرید ثبت شد — فاکتور ${PersianFormat.digits(it.invoiceNumber)}")
+            snackbar.showSnackbar("خرید ثبت شد — فاکتور ${PersianFormat.ltr(it.invoiceNumber)}")
             vm.consumePosted()
         }
     }

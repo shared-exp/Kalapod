@@ -73,7 +73,7 @@ fun SaleScreen(
 
     LaunchedEffect(s.lastPosted) {
         s.lastPosted?.let {
-            snackbar.showSnackbar("فروش ثبت شد — فاکتور ${PersianFormat.digits(it.invoiceNumber)}")
+            snackbar.showSnackbar("فروش ثبت شد — فاکتور ${PersianFormat.ltr(it.invoiceNumber)}")
             vm.consumePosted()
         }
     }

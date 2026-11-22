@@ -109,7 +109,7 @@ private fun DocumentCard(r: DocumentRow, cur: Currency, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    formatDateTime(r.tx.occurredAt) + "  " + PersianFormat.digits(r.invoiceNumber.orEmpty()),
+                    formatDateTime(r.tx.occurredAt) + "  " + PersianFormat.ltr(r.invoiceNumber.orEmpty()),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

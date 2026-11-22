@@ -166,7 +166,7 @@ fun PartyDetailScreen(onBack: () -> Unit, onOpenDocument: (Long) -> Unit, vm: Pa
                         Column(Modifier.weight(1f)) {
                             Text(entryLabel(e, customer) + if (e.reversed) " (باطل‌شده)" else "", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                formatDateTime(e.occurredAt) + (e.invoiceNumber?.let { "  " + PersianFormat.digits(it) } ?: ""),
+                                formatDateTime(e.occurredAt) + (e.invoiceNumber?.let { "  " + PersianFormat.ltr(it) } ?: ""),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
