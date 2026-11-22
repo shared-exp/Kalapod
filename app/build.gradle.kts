@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.vosk.android) { exclude(group = "net.java.dev.jna") }
     implementation("${libs.jna.get()}@aar")
 
+    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation(libs.datastore)
     implementation(libs.work.runtime)
     implementation(libs.coroutines.android)

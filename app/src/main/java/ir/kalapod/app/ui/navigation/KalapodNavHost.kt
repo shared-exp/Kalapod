@@ -30,6 +30,9 @@ import ir.kalapod.app.ui.dashboard.DashboardScreen
 import ir.kalapod.app.ui.documents.DocumentDetailScreen
 import ir.kalapod.app.ui.documents.DocumentsScreen
 import ir.kalapod.app.ui.more.MoreScreen
+import ir.kalapod.app.ui.more.MoreEntry
+import ir.kalapod.app.ui.backup.BackupScreen
+import androidx.compose.material.icons.outlined.Backup
 import ir.kalapod.app.ui.reports.ReportsScreen
 import ir.kalapod.app.ui.more.SettingsScreen
 import ir.kalapod.app.ui.parties.PartiesScreen
@@ -123,6 +126,9 @@ fun KalapodNavHost() {
                     onDocuments = { nav.navigate("documents") },
                     onParties = { nav.navigate("parties") },
                     onSettings = { nav.navigate("settings") },
+                    extra = listOf(
+                        MoreEntry("پشتیبان‌گیری", "نسخه پشتیبان رمزدار، بازیابی، پشتیبان خودکار", Icons.Outlined.Backup) { nav.navigate("backup") },
+                    ),
                 )
             }
             composable("documents") { DocumentsScreen(onOpen = { nav.navigate("document/$it") }) }
@@ -138,6 +144,7 @@ fun KalapodNavHost() {
                 arguments = listOf(navArgument("kind") { type = NavType.StringType }, navArgument("id") { type = NavType.LongType }),
             ) { PartyDetailScreen(onBack = { nav.popBackStack() }, onOpenDocument = { nav.navigate("document/$it") }) }
             composable("reports") { ReportsScreen(onBack = { nav.popBackStack() }) }
+            composable("backup") { BackupScreen(onBack = { nav.popBackStack() }) }
             composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable("document/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) {
                 DocumentDetailScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("document/$it") })
