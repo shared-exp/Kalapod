@@ -156,6 +156,8 @@ fun VoiceSheet(
                             label = { Text("آزمایشی: جمله را بنویسید") },
                             trailingIcon = { TextButton(onClick = { vm.process(typed) }) { Text("ارسال") } },
                         )
+                        listOf("یه رب چین چین فروختم", "دو تا رب چین چین ۵۰۰ گرمی فروختم", "یه دونه رب گوجه فرنگی و دو تا روغن لادن فروختم")
+                            .forEach { sample -> TextButton(onClick = { vm.process(sample) }) { Text(sample, style = MaterialTheme.typography.bodySmall) } }
                     }
                     Text("بعد از گفتن، روی دکمه بزنید", Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall)
                 }
@@ -214,7 +216,8 @@ private fun ReviewContent(
                     )
                     IconButton(onClick = { vm.drop(i) }) { Icon(Icons.Outlined.Close, "حذف") }
                 }
-                val unit = line.product?.unit?.label ?: line.heard.unit?.label.orEmpty()
+                val unit = (line.product?.unit ?: line.heard.unit
+                    ?: line.options.map { it.unit }.distinct().singleOrNull())?.label.orEmpty()
                 Text(
                     "${PersianFormat.quantity(line.quantityMilli)} $unit" +
                         (line.unitPrice?.let { " × " + PersianFormat.money(it, currency) } ?: ""),

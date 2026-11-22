@@ -63,7 +63,7 @@ object VoiceCommandParser {
 
     fun parse(text: String): ParsedCommand {
         val raw = text
-        var tokens = PersianText.tokens(joinSuffixes(text))
+        var tokens = PackSize.mergeCc(PersianText.tokens(joinSuffixes(text)))
 
         val operation = detectOperation(tokens)
         val payment = detectPayment(tokens)
@@ -186,6 +186,15 @@ object VoiceCommandParser {
                     val num = SpokenNumbers.parse(t, i, unitWords.keys)
                     if (num == null) { cur.name += w; i++; continue }
                     val next = t.getOrNull(num.next)
+                    // «۵۰۰ گرمی», «نیم کیلویی», «۱.۵ لیتری»: the pack size is part of the product's name,
+                    // not a quantity. (Word before the number — «کیلویی ۱۸۰ هزار» — stays a unit price.)
+                    if (next != null && PackSize.isSizeWord(next) && next !in unitWords && num.milli < 20_000_000L) {
+                        val whole = num.milli / 1000; val frac = num.milli % 1000
+                        cur.name += if (frac == 0L) whole.toString() else "$whole.${frac.toString().padStart(3, '0').trimEnd('0')}"
+                        cur.name += next
+                        i = num.next + 1
+                        continue
+                    }
                     val looksLikePrice = next != null && (next in currencyWords) ||
                         (num.milli >= 1_000_000L && next !in unitWords) // ≥1000 without a unit: a price
                     when {
