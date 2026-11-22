@@ -15,6 +15,7 @@ import ir.kalapod.app.domain.voice.ResolvedLine
 import ir.kalapod.app.domain.voice.VoiceCommandParser
 import ir.kalapod.app.domain.voice.VoiceOperation
 import ir.kalapod.app.domain.voice.VoiceResolver
+import ir.kalapod.app.domain.voice.TypeAnswer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,7 +31,18 @@ sealed interface VoicePhase {
     /** No usable engine: offer the one-time offline download. */
     data class NeedOfflineModel(val progress: Float? = null, val error: String? = null) : VoicePhase
     data class Listening(val engine: String, val partial: String = "") : VoicePhase
-    data class Review(val heard: String, val command: ParsedCommand, val lines: List<ResolvedLine>) : VoicePhase
+    /**
+     * Confirm/fix what was heard. While [asking] is set, the mic is listening for the type of that
+     * line («کدام رب گوجه فرنگی؟» → «چین چین»); [answerPartial]/[answerNote] show progress/problems.
+     */
+    data class Review(
+        val heard: String,
+        val command: ParsedCommand,
+        val lines: List<ResolvedLine>,
+        val asking: Int? = null,
+        val answerPartial: String = "",
+        val answerNote: String? = null,
+    ) : VoicePhase
     data class Error(val message: String) : VoicePhase
 }
 
@@ -45,11 +57,14 @@ class VoiceViewModel @Inject constructor(
     private val offline: OfflineModelManager,
     private val products: ProductDao,
     private val aliases: ir.kalapod.app.data.local.dao.AliasDao,
+    private val reports: ir.kalapod.app.data.local.dao.ReportDao,
 ) : ViewModel() {
     private val _phase = MutableStateFlow<VoicePhase>(VoicePhase.Idle)
     val phase: StateFlow<VoicePhase> = _phase.asStateFlow()
 
     private var engine: SpeechEngine? = null
+    /** The engine this session listened with; reused to hear the answer to «which type?». */
+    private var sessionEngine: SpeechEngine? = null
 
     /** Set while the user is away defining a product heard in this session. */
     var awaitingDefine = false
@@ -109,6 +124,7 @@ class VoiceViewModel @Inject constructor(
     private fun listen(e: SpeechEngine) {
         engine?.cancel()
         engine = e
+        sessionEngine = e
         _phase.value = VoicePhase.Listening(e.id)
         e.start(object : SpeechCallbacks {
             override fun onPartial(text: String) = _phase.update { if (it is VoicePhase.Listening) it.copy(partial = text) else it }
@@ -124,30 +140,92 @@ class VoiceViewModel @Inject constructor(
     fun process(text: String) {
         if (text.isBlank()) { _phase.value = VoicePhase.Error("صدایی شنیده نشد. دوباره بگویید."); return }
         if (rawMode) { engine?.cancel(); engine = null; _rawText.value = text.trim(); _phase.value = VoicePhase.Idle; return }
+        engine?.cancel(); engine = null
         viewModelScope.launch {
             val cmd = VoiceCommandParser.parse(text)
             val catalog = products.observeActive().first().map {
-                CatalogProduct(it.id, it.name, it.unit, it.salePrice, it.lastPurchasePrice)
+                CatalogProduct(it.id, it.name, it.unit, it.salePrice, it.lastPurchasePrice, it.stockMilli)
             }
             val learned = aliases.all().associate { it.alias to it.productId }
-            val lines = VoiceResolver.resolve(cmd, catalog, forPurchase, learned)
-            _phase.value = if (lines.isEmpty()) {
-                VoicePhase.Error("کالایی در جمله پیدا نشد: «$text»")
+            val sold = salesCounts()
+            // Options: what sells most first, so the usual choice is one tap (or one word) away.
+            val lines = VoiceResolver.resolve(cmd, catalog, forPurchase, learned).map { l ->
+                if (l.options.size < 2) l else l.copy(options = l.options.sortedByDescending { sold[it.id] ?: 0L })
+            }
+            if (lines.isEmpty()) {
+                _phase.value = VoicePhase.Error("کالایی در جمله پیدا نشد: «$text»")
             } else {
-                VoicePhase.Review(text, cmd, lines)
+                _phase.value = VoicePhase.Review(text, cmd, lines)
+                askNext()
             }
         }
     }
 
     fun choose(index: Int, productId: Long) {
         val r = _phase.value as? VoicePhase.Review ?: return
-        val p = r.lines[index].options.firstOrNull { it.id == productId } ?: return
-        _phase.value = r.copy(lines = r.lines.toMutableList().also { it[index] = VoiceResolver.choose(it[index], p, forPurchase) })
-        // Remember: these exact words mean this product next time (fewer questions, fewer mistakes).
-        val heard = ir.kalapod.app.domain.voice.ProductMatcher.fold(r.lines[index].heard.name)
-        if (heard.isNotBlank()) viewModelScope.launch {
+        val line = r.lines[index]
+        val p = line.options.firstOrNull { it.id == productId } ?: return
+        if (r.asking != null) { engine?.cancel(); engine = null }
+        _phase.value = r.copy(
+            lines = r.lines.toMutableList().also { it[index] = VoiceResolver.choose(it[index], p, forPurchase) },
+            asking = null, answerPartial = "", answerNote = null,
+        )
+        // Remember misheard words → product (fewer questions next time). Never for a general name:
+        // «رب گوجه فرنگی» must always ask which type, with nothing pre-selected.
+        val heard = ir.kalapod.app.domain.voice.ProductMatcher.fold(line.heard.name)
+        if (heard.isNotBlank() && !line.generic) viewModelScope.launch {
             aliases.put(ir.kalapod.app.data.local.entity.ProductAliasEntity(alias = heard, productId = p.id, createdAt = System.currentTimeMillis()))
         }
+        askNext()
+    }
+
+    /** Listens for the type of the first line that still needs one (tapping an option always works too). */
+    private fun askNext() {
+        val r = _phase.value as? VoicePhase.Review ?: return
+        val index = r.lines.indexOfFirst { it.needsChoice }
+        if (index < 0) return
+        val e = sessionEngine ?: return
+        engine?.cancel()
+        engine = e
+        _phase.value = r.copy(asking = index, answerPartial = "", answerNote = null)
+        e.start(object : SpeechCallbacks {
+            override fun onPartial(text: String) = _phase.update {
+                if (it is VoicePhase.Review && it.asking == index) it.copy(answerPartial = text) else it
+            }
+            override fun onFinal(text: String) = answer(index, text)
+            override fun onError(message: String) = _phase.update {
+                if (it is VoicePhase.Review && it.asking == index) {
+                    it.copy(asking = null, answerPartial = "", answerNote = "جواب شنیده نشد؛ دوباره بگویید یا یکی از گزینه‌ها را لمس کنید.")
+                } else it
+            }
+        })
+    }
+
+    /** Ask again by voice (after a missed answer). */
+    fun askAgain() = askNext()
+
+    /** Matches a spoken answer («چین چین», «اولی») against the options of line [index]. */
+    fun answer(index: Int, text: String) {
+        val r = _phase.value as? VoicePhase.Review ?: return
+        val line = r.lines.getOrNull(index) ?: return
+        engine?.cancel(); engine = null
+        val picked = TypeAnswer.pick(text, line.options)
+        if (picked != null) {
+            choose(index, picked.id)
+        } else {
+            _phase.value = r.copy(
+                asking = null, answerPartial = "",
+                answerNote = if (text.isBlank()) "جواب شنیده نشد؛ دوباره بگویید یا لمس کنید."
+                else "«${text.trim()}» با هیچ گزینه‌ای جور نشد؛ دوباره بگویید یا لمس کنید.",
+            )
+        }
+    }
+
+    private suspend fun salesCounts(): Map<Long, Long> {
+        val zone = java.time.ZoneId.systemDefault()
+        val from = java.time.LocalDate.now().minusDays(90).atStartOfDay(zone).toInstant().toEpochMilli()
+        return reports.saleLines(from, System.currentTimeMillis(), null)
+            .groupBy { it.productId }.mapValues { (_, l) -> l.sumOf { it.quantityMilli } }
     }
 
     fun drop(index: Int) {

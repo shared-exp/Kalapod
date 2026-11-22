@@ -70,4 +70,17 @@ class ManualSeed {
         }
         db.close()
     }
+
+    /** Several types of one general product, for the «which type?» flow. */
+    @Test fun seedTomatoPasteBrands() = runBlocking {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = Room.databaseBuilder(ctx, KalapodDatabase::class.java, KalapodDatabase.NAME)
+            .addMigrations(*KalapodDatabase.MIGRATIONS).build()
+        val products = ProductRepository(db, InventoryLedger(db))
+        listOf("رب گوجه فرنگی چین چین" to 6_000L, "رب گوجه فرنگی تبرک" to 3_000L, "رب گوجه فرنگی دلپذیر" to 0L).forEach { (n, stock) ->
+            products.save(ProductDraft(name = n, categoryId = null, unit = ProductUnit.PIECE, salePrice = 380_000,
+                purchasePrice = 300_000, minStockMilli = 0, leadTimeDays = 2, barcodes = emptyList(), openingStockMilli = stock))
+        }
+        db.close()
+    }
 }

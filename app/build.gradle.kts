@@ -30,7 +30,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     // Exported Room schemas feed MigrationTestHelper in instrumented tests.
     sourceSets { getByName("androidTest").assets.srcDir("$projectDir/schemas") }
 }

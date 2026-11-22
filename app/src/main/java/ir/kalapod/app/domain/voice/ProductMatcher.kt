@@ -17,8 +17,12 @@ object ProductMatcher {
     sealed interface Match {
         /** Safe to use without asking. */
         data class Sure(val candidate: Candidate) : Match
-        /** Several plausible products: ask the user to pick (best first). */
-        data class Ambiguous(val options: List<Candidate>) : Match
+        /**
+         * Several plausible products: ask the user to pick (best first).
+         * [generic] = the user named a general product («رب گوجه فرنگی») and several types of it are in
+         * stock; the type must be asked every time — no learned shortcut, no default.
+         */
+        data class Ambiguous(val options: List<Candidate>, val generic: Boolean = false) : Match
         /** Nothing close: offer to define a new product. */
         data object None : Match
     }
@@ -34,6 +38,9 @@ object ProductMatcher {
      */
     fun match(spoken: String, catalog: List<Candidate>, aliases: Map<String, Long> = emptyMap()): Match {
         val key = fold(spoken)
+        // A general name that fits several types is always a question, even if it was answered before.
+        val generic = genericMatches(spoken, catalog)
+        if (generic.size >= 2) return Match.Ambiguous(generic, generic = true)
         aliases[key]?.let { id -> catalog.firstOrNull { it.id == id }?.let { return Match.Sure(it) } }
         val ranked = rank(spoken, catalog)
         val top = ranked.firstOrNull() ?: return Match.None
@@ -44,6 +51,29 @@ object ProductMatcher {
         } else {
             Match.Ambiguous(ranked.filter { it.score >= MIN }.take(4).map { it.candidate })
         }
+    }
+
+    /** Generic threshold: every spoken word must be found in the product name at least this well. */
+    private const val CONTAINS = 0.85
+
+    /**
+     * Products whose names contain every meaningful word the user said — e.g. «رب گوجه فرنگی» fits
+     * both «رب گوجه فرنگی چین چین» and «رب گوجه فرنگی تبرک». Best match first.
+     */
+    fun genericMatches(spoken: String, catalog: List<Candidate>): List<Candidate> {
+        val words = meaningfulWords(spoken, catalog)
+        if (words.isEmpty()) return emptyList()
+        return catalog.map { it to fold(it.name).split(' ').filter(String::isNotEmpty) }
+            .filter { (_, p) -> p.isNotEmpty() && words.all { w -> p.maxOf { similarity(w, it) } >= CONTAINS } }
+            .map { (c, _) -> Scored(c, score(words.joinToString(" "), fold(c.name))) }
+            .sortedByDescending { it.score }
+            .map { it.candidate }
+    }
+
+    private fun meaningfulWords(spoken: String, catalog: List<Candidate>): List<String> {
+        val words = fold(spoken).split(' ').filter { it.isNotEmpty() }
+        val vocabulary = catalog.flatMap { fold(it.name).split(' ') }.filter { it.isNotEmpty() }.toSet()
+        return words.filter { w -> (vocabulary.maxOfOrNull { similarity(w, it) } ?: 0.0) >= FILLER }.ifEmpty { words }
     }
 
     fun rank(spoken: String, catalog: List<Candidate>): List<Scored> {

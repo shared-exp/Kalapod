@@ -44,9 +44,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -144,6 +146,17 @@ fun VoiceSheet(
                             Icon(Icons.Outlined.Mic, "پایان صحبت", Modifier.size(40.dp))
                         }
                     }
+                    if (ir.kalapod.app.BuildConfig.DEBUG) {
+                        // QA only (emulators have no real microphone): type what would have been said.
+                        var typed by androidx.compose.runtime.saveable.rememberSaveable {
+                            androidx.compose.runtime.mutableStateOf("یه دونه رب گوجه فرنگی و دو تا روغن لادن فروختم")
+                        }
+                        androidx.compose.material3.OutlinedTextField(
+                            typed, { typed = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            label = { Text("آزمایشی: جمله را بنویسید") },
+                            trailingIcon = { TextButton(onClick = { vm.process(typed) }) { Text("ارسال") } },
+                        )
+                    }
                     Text("بعد از گفتن، روی دکمه بزنید", Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall)
                 }
 
@@ -186,7 +199,13 @@ private fun ReviewContent(
     p.command.partyName?.let { Text("طرف حساب: $it") }
 
     p.lines.forEachIndexed { i, line ->
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)) {
+        val pending = line.needsChoice
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = if (pending) MaterialTheme.colorScheme.secondaryContainer
+                else MaterialTheme.colorScheme.surfaceContainerLowest,
+            ),
+        ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -200,9 +219,48 @@ private fun ReviewContent(
                     "${PersianFormat.quantity(line.quantityMilli)} $unit" +
                         (line.unitPrice?.let { " × " + PersianFormat.money(it, currency) } ?: ""),
                 )
-                if (line.needsChoice) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        line.options.forEach { o -> FilterChip(false, onClick = { vm.choose(i, o.id) }, label = { Text(o.name) }) }
+                if (pending) {
+                    // The question, by voice and on screen; nothing is pre-selected.
+                    Text(
+                        "کدام «${line.heard.name}»؟",
+                        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
+                    )
+                    when {
+                        p.asking == i -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Mic, null, tint = MaterialTheme.colorScheme.primary)
+                            Text(
+                                p.answerPartial.ifBlank { "بگویید، مثلاً «${optionLabel(line.options.first(), line.options)}»" },
+                                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 6.dp),
+                            )
+                            TextButton(onClick = vm::stopListening) { Text("پایان") }
+                        }
+                        p.asking == null -> TextButton(onClick = vm::askAgain) {
+                            Icon(Icons.Outlined.Mic, null)
+                            Text("گفتن نوع")
+                        }
+                    }
+                    if (p.asking == null || p.asking == i) p.answerNote?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        line.options.forEach { o ->
+                            val out = o.stockMilli <= 0
+                            FilterChip(
+                                selected = false,
+                                onClick = { vm.choose(i, o.id) },
+                                modifier = Modifier.alpha(if (out) 0.55f else 1f),
+                                label = {
+                                    Column(Modifier.padding(vertical = 4.dp)) {
+                                        Text(optionLabel(o, line.options), style = MaterialTheme.typography.titleSmall)
+                                        Text(
+                                            (if (out) "ناموجود" else "موجودی ${PersianFormat.quantity(o.stockMilli)}") +
+                                                " · " + PersianFormat.money(o.salePrice, currency),
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
                 if (line.isUnknown) {
@@ -214,16 +272,21 @@ private fun ReviewContent(
             }
         }
     }
-    val ready = p.lines.filter { it.product != null }
+    // Nothing is added until every line is a definite product: no partial carts, nothing assumed.
+    val needType = p.lines.count { it.needsChoice }
+    val unknown = p.lines.count { it.isUnknown }
     Button(
-        onClick = { onApply(ready, p.command); vm.close() },
-        enabled = ready.isNotEmpty() && !returnOnWrongScreen,
+        onClick = { onApply(p.lines, p.command); vm.close() },
+        enabled = needType == 0 && unknown == 0 && p.lines.isNotEmpty() && !returnOnWrongScreen,
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
     ) {
         Text(
-            if (expected == VoiceOperation.RETURN) "ثبت در فرم مرجوعی"
-            else if (ready.size == p.lines.size) "افزودن به سبد"
-            else "افزودن ${PersianFormat.number(ready.size.toLong())} قلم مشخص‌شده",
+            when {
+                needType > 0 -> "نوع ${PersianFormat.number(needType.toLong())} قلم را انتخاب کنید"
+                unknown > 0 -> "کالای ناشناخته را تعریف یا حذف کنید"
+                expected == VoiceOperation.RETURN -> "ثبت در فرم مرجوعی"
+                else -> "افزودن به سبد"
+            },
             style = MaterialTheme.typography.titleMedium,
         )
     }
@@ -248,4 +311,13 @@ fun spokenQuantity(text: String): Long? {
     val t = ir.kalapod.app.domain.voice.PersianText.tokens(text)
     for (i in t.indices) ir.kalapod.app.domain.voice.SpokenNumbers.parse(t, i)?.let { return it.milli }
     return null
+}
+
+/** Shows what makes an option different («چین چین») instead of repeating the shared «رب گوجه فرنگی». */
+private fun optionLabel(o: ir.kalapod.app.domain.voice.CatalogProduct, all: List<ir.kalapod.app.domain.voice.CatalogProduct>): String {
+    val words = o.name.trim().split(' ').filter { it.isNotEmpty() }
+    val common = ir.kalapod.app.domain.voice.TypeAnswer.commonPrefixWords(
+        all.map { a -> a.name.trim().split(' ').filter { it.isNotEmpty() }.joinToString(" ") },
+    )
+    return words.drop(common).joinToString(" ").ifBlank { o.name }
 }

@@ -68,10 +68,27 @@ class VoiceResolverTest {
         assertEquals(2_000L, l.quantityMilli)
     }
 
-    @Test fun learnedAliasSkipsTheQuestion() {
-        val cmd = VoiceCommandParser.parse("یه رب گوجه فروختم")
-        assertTrue(VoiceResolver.resolve(cmd, catalog, false).single().needsChoice)
-        val learned = mapOf(ProductMatcher.fold("رب گوجه") to 7L)
-        assertEquals(7L, VoiceResolver.resolve(cmd, catalog, false, learned).single().product?.id)
+    @Test fun genericNameAlwaysAsksEvenIfAnsweredBefore() {
+        val cmd = VoiceCommandParser.parse("یه دونه رب گوجه فرنگی فروختم")
+        val first = VoiceResolver.resolve(cmd, catalog, false).single()
+        assertTrue(first.needsChoice)
+        assertTrue(first.generic)
+        assertEquals(setOf(6L, 7L), first.options.map { it.id }.toSet())
+        // Even with a remembered answer, a general name gets the question again — no default.
+        val learned = mapOf(ProductMatcher.fold("رب گوجه فرنگی") to 7L)
+        val again = VoiceResolver.resolve(cmd, catalog, false, learned).single()
+        assertTrue(again.needsChoice)
+        assertNull(again.product)
+    }
+
+    @Test fun specificNameNeedsNoQuestion() {
+        val l = resolve("یه رب گوجه فرنگی تبرک فروختم").single()
+        assertEquals(7L, l.product?.id)
+    }
+
+    @Test fun onlyOneTypeInStockIsNotGeneric() {
+        val single = catalog.filter { it.id != 7L }
+        val l = VoiceResolver.resolve(VoiceCommandParser.parse("یه رب گوجه فرنگی فروختم"), single, false).single()
+        assertEquals(6L, l.product?.id)
     }
 }

@@ -10,6 +10,8 @@ data class CatalogProduct(
     val unit: ProductUnit,
     val salePrice: Long,
     val lastPurchasePrice: Long,
+    /** Current stock (milli-units), shown next to each option when the user picks a type. */
+    val stockMilli: Long = 0,
 )
 
 /** One heard item mapped onto the catalog, ready to drop into a cart (after the user confirms). */
@@ -23,6 +25,8 @@ data class ResolvedLine(
     val unitPrice: Long?,
     /** Short Persian notes the user should see ("قیمت گفته نشد…"). */
     val notes: List<String>,
+    /** A general name with several types in stock: the type must be chosen, never assumed or learned. */
+    val generic: Boolean = false,
 ) {
     val needsChoice get() = product == null && options.isNotEmpty()
     val isUnknown get() = product == null && options.isEmpty()
@@ -46,7 +50,7 @@ object VoiceResolver {
                 is ProductMatcher.Match.Sure -> fit(item, byId.getValue(m.candidate.id), forPurchase)
                 is ProductMatcher.Match.Ambiguous -> ResolvedLine(
                     item, null, m.options.map { byId.getValue(it.id) },
-                    item.quantityMilli ?: Money.MILLI, null, listOf("کدام «${item.name}»؟"),
+                    item.quantityMilli ?: Money.MILLI, null, listOf("کدام «${item.name}»؟"), generic = m.generic,
                 )
                 ProductMatcher.Match.None -> ResolvedLine(
                     item, null, emptyList(), item.quantityMilli ?: Money.MILLI, null,
