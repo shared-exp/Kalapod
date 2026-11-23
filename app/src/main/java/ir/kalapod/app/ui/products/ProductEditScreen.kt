@@ -63,6 +63,7 @@ import ir.kalapod.app.ui.common.label
 fun ProductEditScreen(
     onDone: () -> Unit,
     onOpenDocument: (Long) -> Unit = {},
+    onNewBatch: () -> Unit = {},
     vm: ProductEditViewModel = hiltViewModel(),
 ) {
     val f by vm.form.collectAsStateWithLifecycle()
@@ -198,6 +199,21 @@ fun ProductEditScreen(
             dismissButton = { TextButton(onClick = { showNewCategory = false }) { Text("انصراف") } },
         )
     }
+    vm.duplicate.collectAsStateWithLifecycle().value?.let { existing ->
+        AlertDialog(
+            onDismissRequest = { vm.duplicate.value = null },
+            title = { Text("این کالا در انبار هست") },
+            text = {
+                Text(
+                    "«${existing.name}» با موجودی ${PersianFormat.quantity(existing.stockMilli)} ${existing.unit.label} ثبت شده است.\n" +
+                        "بار جدید (حتی با قیمت متفاوت) را به‌صورت خرید ثبت کنید؛ موجودی اضافه می‌شود و قیمت تمام‌شده میانگین می‌شود.",
+                )
+            },
+            confirmButton = { TextButton(onClick = { vm.registerNewBatch(); onNewBatch() }) { Text("ثبت بار جدید") } },
+            dismissButton = { TextButton(onClick = { vm.duplicate.value = null }) { Text("تغییر نام") } },
+        )
+    }
+
     if (showAdjust) {
         var count by remember { mutableStateOf("") }
         var reason by remember { mutableStateOf("") }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AddShoppingCart
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.PointOfSale
@@ -64,8 +65,8 @@ fun DashboardScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
             Column(Modifier.statusBarsPadding()) {
-                if (emptyShop) WelcomeRestoreCard(onRestoreBackup)
-                if (backupOff) BackupReminderCard(onOpenBackup)
+                if (emptyShop) WelcomeRestoreCard(onRestoreBackup, onClose = viewModel::dismissWelcome)
+                if (backupOff) BackupReminderCard(onOpenBackup, onClose = viewModel::dismissReminder)
                 DashboardContent(state as DashboardUiState.Ready, runningOut, onNewSale, onNewPurchase, onOpenInventory, onOpenSuggestions)
             }
         }
@@ -245,14 +246,19 @@ private fun AlertsCard(
 
 /** Shown on a fresh install: one tap to bring an earlier backup back. */
 @Composable
-private fun WelcomeRestoreCard(onRestore: () -> Unit) {
+private fun WelcomeRestoreCard(onRestore: () -> Unit, onClose: () -> Unit) {
     Card(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("قبلاً از کالاپاد استفاده می‌کردید؟", style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("قبلاً از کالاپاد استفاده می‌کردید؟", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                androidx.compose.material3.IconButton(onClick = onClose) {
+                    Icon(androidx.compose.material.icons.Icons.Default.Close, "بستن")
+                }
+            }
             Text("اگر نسخه پشتیبان دارید، همه کالاها، فاکتورها و حساب‌ها را برگردانید.", style = MaterialTheme.typography.bodyMedium)
             Button(onClick = onRestore, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("بازیابی نسخه پشتیبان") }
         }
@@ -261,7 +267,7 @@ private fun WelcomeRestoreCard(onRestore: () -> Unit) {
 
 /** All shop data lives on this phone; nudge until daily backup is switched on. */
 @Composable
-private fun BackupReminderCard(onOpen: () -> Unit) {
+private fun BackupReminderCard(onOpen: () -> Unit, onClose: () -> Unit) {
     Card(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
         shape = MaterialTheme.shapes.large,
@@ -270,6 +276,9 @@ private fun BackupReminderCard(onOpen: () -> Unit) {
         Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("پشتیبان‌گیری خودکار خاموش است", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = onOpen) { Text("روشن کردن") }
+            androidx.compose.material3.IconButton(onClick = onClose) {
+                Icon(androidx.compose.material.icons.Icons.Default.Close, "بستن")
+            }
         }
     }
 }

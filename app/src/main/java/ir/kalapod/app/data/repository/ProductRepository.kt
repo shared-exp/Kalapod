@@ -30,6 +30,8 @@ data class ProductDraft(
 sealed class SaveResult {
     data class Saved(val id: Long) : SaveResult()
     data class Invalid(val message: String) : SaveResult()
+    /** A new product with the name of one already in stock: really a new batch of [existing]. */
+    data class Duplicate(val existing: ProductEntity) : SaveResult()
 }
 
 @Singleton
@@ -58,7 +60,10 @@ class ProductRepository @Inject constructor(
         val codes = d.barcodes.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 
         return db.withTransaction {
-            if (products.countByName(name, d.id) > 0) return@withTransaction SaveResult.Invalid("کالایی با این نام وجود دارد.")
+            products.findByName(name, d.id)?.let { existing ->
+                return@withTransaction if (d.id == 0L) SaveResult.Duplicate(existing)
+                else SaveResult.Invalid("کالای دیگری با این نام وجود دارد.")
+            }
             for (c in codes) {
                 val owner = barcodes.byCode(c)
                 if (owner != null && owner.productId != d.id) {

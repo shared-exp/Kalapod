@@ -65,8 +65,28 @@ object PackSize {
         return out
     }
 
+    /** A number said without a unit inside a name («رب ۷۰۰ چین چین») → "#700" (a size of unknown unit). */
+    fun bare(milli: Long): String {
+        val whole = milli / 1000; val frac = milli % 1000
+        return "#" + if (frac == 0L) "$whole" else "$whole.${frac.toString().padStart(3, '0').trimEnd('0')}"
+    }
+
+    fun isBare(token: String) = token.startsWith("#") && token.drop(1).toDoubleOrNull() != null
+
+    /**
+     * Does a size token said in speech fit a product's size token? "250g"="250g"; a bare "#700" fits
+     * "700g"/"700ml"; a bare "#1.5" fits "1500ml"/"1500g" (litres/kilos said without the unit).
+     */
+    fun fits(said: String, product: String): Boolean {
+        if (said == product) return true
+        val amount = amount(product) ?: return false
+        if (!isBare(said)) return false
+        val v = said.drop(1).toDouble()
+        return v == amount.toDouble() || Math.round(v * 1000) == amount
+    }
+
     /** Canonical size tokens in an already-normalized name, e.g. {"250g"}. */
-    fun sizesIn(tokens: List<String>): Set<String> = tokens.filter { canonical.matches(it) }.toSet()
+    fun sizesIn(tokens: List<String>): Set<String> = tokens.filter { canonical.matches(it) || isBare(it) }.toSet()
 
     /** "250g" → 250, "1500ml" → 1500; null if not a size token. */
     fun amount(token: String): Long? = canonical.matchEntire(token)?.groupValues?.get(1)?.toLong()

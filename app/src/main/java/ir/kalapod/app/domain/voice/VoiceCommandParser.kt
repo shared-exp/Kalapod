@@ -212,6 +212,13 @@ object VoiceCommandParser {
                             b.unitPrice = price.first
                             i = price.second
                         }
+                        // «۱۰ تا رب ۷۰۰ چین چین» = «۱۰ تا رب چین چین ۷۰۰»: once an item has its quantity, a bare
+                        // number (no unit after it, not a price) belongs to the name. The next item starts at
+                        // a number followed by a unit («۲۰ تا روغن …»), handled above.
+                        cur.qty != null || (cur.name.isNotEmpty() && items.isNotEmpty()) -> {
+                            cur.name += PackSize.bare(num.milli)
+                            i = num.next
+                        }
                         else -> {
                             if (cur.qty != null && cur.name.isNotEmpty()) flush()
                             cur.qty = num.milli

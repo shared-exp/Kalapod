@@ -30,6 +30,9 @@ data class BackupSettings(
     val folderUri: String? = null,
     val lastBackupAt: Long? = null,
     val lastError: String? = null,
+    /** The user closed the dashboard cards (welcome-restore / auto-backup reminder); don't show them again. */
+    val welcomeDismissed: Boolean = false,
+    val reminderDismissed: Boolean = false,
 )
 
 /**
@@ -43,9 +46,11 @@ class BackupPrefs @Inject constructor(@ApplicationContext private val context: C
     private val folderKey = stringPreferencesKey("folder")
     private val lastKey = longPreferencesKey("last")
     private val errorKey = stringPreferencesKey("error")
+    private val welcomeKey = booleanPreferencesKey("welcome_dismissed")
+    private val reminderKey = booleanPreferencesKey("reminder_dismissed")
 
     val settings: Flow<BackupSettings> = context.backupStore.data.map {
-        BackupSettings(it[pwKey] != null, it[autoKey] == true, it[folderKey], it[lastKey], it[errorKey])
+        BackupSettings(it[pwKey] != null, it[autoKey] == true, it[folderKey], it[lastKey], it[errorKey], it[welcomeKey] == true, it[reminderKey] == true)
     }
 
     suspend fun savePassword(password: CharArray) {
@@ -68,6 +73,9 @@ class BackupPrefs @Inject constructor(@ApplicationContext private val context: C
         it[autoKey] = enabled
         if (folderUri != null) it[folderKey] = folderUri
     }
+
+    suspend fun dismissWelcome() = context.backupStore.edit { it[welcomeKey] = true }
+    suspend fun dismissReminder() = context.backupStore.edit { it[reminderKey] = true }
 
     suspend fun recordResult(at: Long?, error: String?) = context.backupStore.edit {
         if (at != null) it[lastKey] = at

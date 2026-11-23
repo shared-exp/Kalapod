@@ -98,7 +98,9 @@ object ProductMatcher {
         // A pack size that was said must be this product's size: «۵۰۰ گرمی» never matches the 250 g pack.
         val spokenSizes = PackSize.sizesIn(sTokens)
         val productSizes = PackSize.sizesIn(pTokens)
-        if (spokenSizes.isNotEmpty() && productSizes.isNotEmpty() && spokenSizes.intersect(productSizes).isEmpty()) return 0.3
+        if (spokenSizes.isNotEmpty() && productSizes.isNotEmpty() &&
+            spokenSizes.none { s -> productSizes.any { p -> PackSize.fits(s, p) } }
+        ) return 0.3
         // Every spoken word should be found in the product name…
         val coverage = sTokens.map { st -> pTokens.maxOf { similarity(st, it) } }.average()
         // …and, lightly, the product's words should have been said (so the more specific name loses when unsaid).
@@ -110,8 +112,10 @@ object ProductMatcher {
     /** Similarity of two words: plain spelling, or by sound with a small discount. */
     internal fun similarity(a: String, b: String): Double {
         if (a == b) return 1.0
-        // Sizes are exact: 250 g is not "almost" 2500 g.
-        if (PackSize.amount(a) != null || PackSize.amount(b) != null) return 0.0
+        // Sizes are exact: 250 g is not "almost" 2500 g. A bare "#700" fits "700g".
+        if (PackSize.amount(a) != null || PackSize.amount(b) != null || PackSize.isBare(a) || PackSize.isBare(b)) {
+            return if (PackSize.fits(a, b) || PackSize.fits(b, a)) 1.0 else 0.0
+        }
         val plain = levenshteinSimilarity(a, b)
         val bySound = levenshteinSimilarity(sound(a), sound(b)) * 0.97
         return maxOf(plain, bySound)

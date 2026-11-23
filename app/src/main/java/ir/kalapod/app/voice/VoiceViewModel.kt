@@ -156,7 +156,6 @@ class VoiceViewModel @Inject constructor(
                 _phase.value = VoicePhase.Error("کالایی در جمله پیدا نشد: «$text»")
             } else {
                 _phase.value = VoicePhase.Review(text, cmd, lines)
-                askNext()
             }
         }
     }
@@ -176,7 +175,6 @@ class VoiceViewModel @Inject constructor(
         if (heard.isNotBlank() && !line.generic) viewModelScope.launch {
             aliases.put(ir.kalapod.app.data.local.entity.ProductAliasEntity(alias = heard, productId = p.id, createdAt = System.currentTimeMillis()))
         }
-        askNext()
     }
 
     /** Listens for the type of the first line that still needs one (tapping an option always works too). */

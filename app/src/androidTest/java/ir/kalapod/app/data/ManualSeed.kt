@@ -48,7 +48,7 @@ class ManualSeed {
             when (val r = products.save(ProductDraft(name = p.name, categoryId = null, unit = p.unit, salePrice = p.sell,
                 purchasePrice = p.buy, minStockMilli = p.min, leadTimeDays = 2, barcodes = emptyList()))) {
                 is SaveResult.Saved -> r.id
-                is SaveResult.Invalid -> return@runBlocking // already seeded
+                else -> return@runBlocking // already seeded
             }
         }
         val zone = ZoneId.systemDefault()

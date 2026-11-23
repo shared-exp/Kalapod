@@ -27,6 +27,8 @@ data class ResolvedLine(
     val notes: List<String>,
     /** A general name with several types in stock: the type must be chosen, never assumed or learned. */
     val generic: Boolean = false,
+    /** Purchases: what was heard may be a product we don't stock yet; offer «کالای جدید». */
+    val allowNew: Boolean = false,
 ) {
     val needsChoice get() = product == null && options.isNotEmpty()
     val isUnknown get() = product == null && options.isEmpty()
@@ -47,10 +49,20 @@ object VoiceResolver {
         val byId = catalog.associateBy { it.id }
         return cmd.items.filter { it.name.isNotBlank() }.map { item ->
             when (val m = ProductMatcher.match(item.name, candidates, aliases)) {
-                is ProductMatcher.Match.Sure -> fit(item, byId.getValue(m.candidate.id), forPurchase)
+                // A purchase may be a brand-new product: approximate (sound-alike) guesses become a question.
+                is ProductMatcher.Match.Sure -> if (forPurchase && !nearExact(item.name, m.candidate, candidates, aliases)) {
+                    ResolvedLine(
+                        item, null, ProductMatcher.rank(item.name, candidates).filter { it.score >= 0.5 }.take(4)
+                            .map { byId.getValue(it.candidate.id) },
+                        item.quantityMilli ?: Money.MILLI, null, listOf("کدام «${item.name}»؟"), allowNew = true,
+                    )
+                } else {
+                    fit(item, byId.getValue(m.candidate.id), forPurchase)
+                }
                 is ProductMatcher.Match.Ambiguous -> ResolvedLine(
                     item, null, m.options.map { byId.getValue(it.id) },
                     item.quantityMilli ?: Money.MILLI, null, listOf("کدام «${item.name}»؟"), generic = m.generic,
+                    allowNew = forPurchase,
                 )
                 ProductMatcher.Match.None -> ResolvedLine(
                     item, null, emptyList(), item.quantityMilli ?: Money.MILLI, null,
@@ -59,6 +71,18 @@ object VoiceResolver {
             }
         }
     }
+
+    /** The spoken name is (almost) exactly the product's name, or a name the user taught us. */
+    private fun nearExact(
+        spoken: String, c: ProductMatcher.Candidate, all: List<ProductMatcher.Candidate>, aliases: Map<String, Long>,
+    ): Boolean {
+        if (aliases[ProductMatcher.fold(spoken)] == c.id) return true
+        val s = ProductMatcher.rank(spoken, all).firstOrNull { it.candidate.id == c.id }?.score ?: 0.0
+        return s >= NEAR_EXACT
+    }
+
+    /** Purchases only auto-match above this; below it the user confirms or says «new product». */
+    private const val NEAR_EXACT = 0.97
 
     /** Re-fits a line after the user picks/defines its product. */
     fun choose(line: ResolvedLine, product: CatalogProduct, forPurchase: Boolean) = fit(line.heard, product, forPurchase)

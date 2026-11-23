@@ -48,7 +48,25 @@ class ProductEditViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val repo: ProductRepository,
     private val settings: SettingsRepository,
+    private val pending: ir.kalapod.app.ui.forecast.PendingPurchase,
 ) : ViewModel() {
+    /** Set when the user typed the name of a product already in stock. */
+    val duplicate = kotlinx.coroutines.flow.MutableStateFlow<ir.kalapod.app.data.local.entity.ProductEntity?>(null)
+
+    /**
+     * Hands the existing product to the purchase screen as a new batch: quantity from «موجودی فعلی»
+     * (or 1) and the newly typed purchase price. Stock and average cost then update through a normal purchase.
+     */
+    fun registerNewBatch() {
+        val p = duplicate.value ?: return
+        val f = _form.value
+        val qty = InputParser.quantity(f.openingStock)?.takeIf { it > 0 } ?: 1_000L
+        val price = if (f.purchasePrice.isBlank()) null else InputParser.money(f.purchasePrice, f.currency)
+        pending.items = listOf(p.id to qty)
+        pending.prices = if (price != null && price > 0) mapOf(p.id to price) else emptyMap()
+        duplicate.value = null
+    }
+
     private val productId: Long = savedState.get<Long>("id") ?: 0L
     private val initialBarcode: String? = savedState.get<String>("barcode")?.takeIf { it.isNotBlank() }
     private val initialName: String = savedState.get<String>("name").orEmpty()
@@ -122,6 +140,7 @@ class ProductEditViewModel @Inject constructor(
                 when (r) {
                     is SaveResult.Saved -> it.copy(saving = false, done = true)
                     is SaveResult.Invalid -> it.copy(saving = false, error = r.message)
+                    is SaveResult.Duplicate -> { duplicate.value = r.existing; it.copy(saving = false) }
                 }
             }
         }

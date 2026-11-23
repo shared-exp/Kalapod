@@ -193,12 +193,14 @@ class PurchaseViewModel @Inject constructor(
     /** Adds items handed over from the order-suggestions screen (once). */
     fun consumePending() {
         val items = pending.items ?: return
+        val prices = pending.prices
         pending.items = null
+        pending.prices = emptyMap()
         viewModelScope.launch {
             val fetched = items.mapNotNull { (id, q) -> products.get(id)?.let { it to q } }
             edit { s ->
                 var ls = s.lines
-                fetched.forEach { (p, q) -> ls = ls.addOrIncrement(CartLine.of(p, p.lastPurchasePrice, s.currency, q)) }
+                fetched.forEach { (p, q) -> ls = ls.addOrIncrement(CartLine.of(p, prices[p.id] ?: p.lastPurchasePrice, s.currency, q)) }
                 s.copy(lines = ls)
             }
         }

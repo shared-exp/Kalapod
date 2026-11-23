@@ -41,9 +41,14 @@ object SpokenNumbers {
             val t = tokens[i]
             val digits = t.toNumberOrNull()
             when {
+                // Two numbers written in digits never form one number («۷۰۰ ۲۰ تا …» is 700, then 20).
+                digits != null && consumedAny -> break
                 digits != null -> { current += digits; consumedAny = true; i++ }
                 t == HALF -> { current += 500; consumedAny = true; i++ }
                 t == "صد" && current in 1..9_000 -> { current *= 100; i++ }
+                // Number words join only with «و» or after a scale («دو هزار پونصد»); «هفتصد بیست تا …» is
+                // 700 and then 20 (the next item's quantity).
+                t in units && consumedAny && tokens[i - 1] != AND && tokens[i - 1] !in scales -> break
                 t in units -> { current += units.getValue(t) * 1000L; consumedAny = true; i++ }
                 t in scales -> {
                     val s = scales.getValue(t)

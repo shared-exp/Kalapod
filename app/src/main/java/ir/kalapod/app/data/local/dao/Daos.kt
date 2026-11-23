@@ -60,6 +60,9 @@ interface ProductDao {
     )
     fun observeFiltered(q: String, categoryId: Long?, lowOnly: Boolean): Flow<List<ProductEntity>>
 
+    @Query("SELECT * FROM products WHERE isArchived = 0 AND name = :name AND id != :exceptId LIMIT 1")
+    suspend fun findByName(name: String, exceptId: Long): ProductEntity?
+
     @Query("SELECT COUNT(*) FROM products WHERE isArchived = 0 AND name = :name AND id != :exceptId")
     suspend fun countByName(name: String, exceptId: Long): Int
 

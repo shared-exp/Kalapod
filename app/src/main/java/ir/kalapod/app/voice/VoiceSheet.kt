@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material3.Button
@@ -156,7 +157,7 @@ fun VoiceSheet(
                             label = { Text("آزمایشی: جمله را بنویسید") },
                             trailingIcon = { TextButton(onClick = { vm.process(typed) }) { Text("ارسال") } },
                         )
-                        listOf("یه رب چین چین فروختم", "دو تا رب چین چین ۵۰۰ گرمی فروختم", "یه دونه رب گوجه فرنگی و دو تا روغن لادن فروختم")
+                        listOf("یه رب چین چین فروختم", "۱۰ تا رب ۷۰۰ چین چین ۲۰ تا روغن لادن ۱.۵ فروختم", "ده تا رب گوجه ارنگی شین شین ۵۰۰ خریدم", "پنج کارتن نوشابه زمزم خریدم")
                             .forEach { sample -> TextButton(onClick = { vm.process(sample) }) { Text(sample, style = MaterialTheme.typography.bodySmall) } }
                     }
                     Text("بعد از گفتن، روی دکمه بزنید", Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall)
@@ -228,23 +229,6 @@ private fun ReviewContent(
                         "کدام «${line.heard.name}»؟",
                         style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
                     )
-                    when {
-                        p.asking == i -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.Mic, null, tint = MaterialTheme.colorScheme.primary)
-                            Text(
-                                p.answerPartial.ifBlank { "بگویید، مثلاً «${optionLabel(line.options.first(), line.options)}»" },
-                                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 6.dp),
-                            )
-                            TextButton(onClick = vm::stopListening) { Text("پایان") }
-                        }
-                        p.asking == null -> TextButton(onClick = vm::askAgain) {
-                            Icon(Icons.Outlined.Mic, null)
-                            Text("گفتن نوع")
-                        }
-                    }
-                    if (p.asking == null || p.asking == i) p.answerNote?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         line.options.forEach { o ->
                             val out = o.stockMilli <= 0
@@ -262,6 +246,14 @@ private fun ReviewContent(
                                         )
                                     }
                                 },
+                            )
+                        }
+                        if (line.allowNew) {
+                            FilterChip(
+                                selected = false,
+                                onClick = { onDefine(line.heard.name) },
+                                label = { Text("«${line.heard.name}» کالای جدید است", style = MaterialTheme.typography.titleSmall) },
+                                leadingIcon = { Icon(Icons.Outlined.Add, null) },
                             )
                         }
                     }

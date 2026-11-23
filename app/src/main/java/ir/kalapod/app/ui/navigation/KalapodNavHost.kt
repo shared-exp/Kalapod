@@ -124,7 +124,13 @@ fun KalapodNavHost() {
                     navArgument("barcode") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("name") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
-            ) { ProductEditScreen(onDone = { nav.popBackStack() }, onOpenDocument = { nav.navigate("document/$it") }) }
+            ) {
+                ProductEditScreen(
+                    onDone = { nav.popBackStack() },
+                    onOpenDocument = { nav.navigate("document/$it") },
+                    onNewBatch = { nav.popBackStack(); go(TopLevel.PURCHASE.route) },
+                )
+            }
             composable(TopLevel.REPORTS.route) {
                 MoreScreen(
                     onReports = { nav.navigate("reports") },

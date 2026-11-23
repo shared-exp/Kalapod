@@ -52,7 +52,7 @@ class ProductRepositoryTest {
 
     @Test fun duplicateNameAndBarcodeRejected() = runBlocking {
         repo.save(draft("روغن لادن", barcodes = listOf("6260000000001")))
-        assertTrue(repo.save(draft("روغن لادن")) is SaveResult.Invalid)
+        assertTrue(repo.save(draft("روغن لادن")) is SaveResult.Duplicate)
         assertTrue(repo.save(draft("روغن دیگر", barcodes = listOf("6260000000001"))) is SaveResult.Invalid)
         assertEquals("روغن لادن", repo.findByBarcode("6260000000001")?.name)
     }
