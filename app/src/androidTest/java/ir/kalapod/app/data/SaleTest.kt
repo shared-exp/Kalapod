@@ -51,30 +51,30 @@ class SaleTest {
                 ),
             ) as SaveResult.Saved
             ).id
-        // 10 kg @ 1,800,000 and 10 kg @ 2,200,000 → average 2,000,000 rial/kg
+        // Two batches: 10 kg @ 1,800,000 then 10 kg @ 2,200,000 (sold oldest first, never averaged)
         tx.postPurchase(PurchaseDraft("p1", listOf(LineInput(rice, 10_000, 1_800_000)), paidAmount = 18_000_000))
         tx.postPurchase(PurchaseDraft("p2", listOf(LineInput(rice, 10_000, 2_200_000)), paidAmount = 22_000_000))
     }
 
     @After fun tearDown() = db.close()
 
-    @Test fun saleUsesMovingAverageCostAndComputesProfit() = runBlocking {
+    @Test fun saleTakesOldestBatchCostAndComputesProfit() = runBlocking {
         val r = tx.postSale(
             SaleDraft("s1", listOf(LineInput(rice, 4_000, 2_500_000)), discount = 200_000, receivedAmount = 9_800_000),
         ) as PostResult.Posted
         assertTrue(r.invoiceNumber.startsWith("S-"))
         val item = db.transactionDao().items(r.transactionId).single()
-        assertEquals(8_000_000L, item.costTotal)       // 4 kg × 2,000,000
+        assertEquals(7_200_000L, item.costTotal)       // 4 kg × 1,800,000 from the first batch
         assertEquals(10_000_000L, item.lineTotal)
 
         val p = products.get(rice)!!
         assertEquals(16_000L, p.stockMilli)
-        assertEquals(32_000_000L, p.stockValue)
+        assertEquals(32_800_000L, p.stockValue)     // 6 × 1.8M + 10 × 2.2M
 
         val today = dashboard.daySummary(LocalDate.now()).first()
         assertEquals(9_800_000L, today.netSales)
         assertEquals(1, today.saleCount)
-        assertEquals(10_000_000L - 8_000_000L - 200_000L, today.grossProfit)
+        assertEquals(10_000_000L - 7_200_000L - 200_000L, today.grossProfit)
     }
 
     @Test fun oversellRequiresExplicitConfirmation() = runBlocking {

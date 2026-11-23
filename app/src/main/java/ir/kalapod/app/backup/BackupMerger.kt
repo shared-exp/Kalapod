@@ -42,7 +42,7 @@ data class MergeSummary(
  *    gets the next free number and «شماره قبلی: …» in its note.
  *  - Stock entered as «موجودی اولیه» after the reinstall is the same physical goods, so it becomes a
  *    stock count at that date (no double stock).
- *  - Cost of goods for every merged product is recomputed in date order (moving weighted average).
+ *  - Stock batches and cost of goods of every merged product are rebuilt in date order (FIFO).
  */
 @Singleton
 class BackupMerger @Inject constructor(
@@ -253,6 +253,8 @@ class BackupMerger @Inject constructor(
                     put("productId", pid); tx?.let { put("transactionId", txMap[it]) }
                     put("reason", c.str("reason")); put("quantityDeltaMilli", c.long("quantityDeltaMilli"))
                     put("valueDelta", c.long("valueDelta")); put("note", c.strOrNull("note")); put("occurredAt", c.long("occurredAt"))
+                    val sp = c.getColumnIndex("salePrice")
+                    if (sp >= 0 && !c.isNull(sp)) put("salePrice", c.getLong(sp))
                 })
             }
         }
@@ -296,80 +298,95 @@ class BackupMerger @Inject constructor(
     }
 
     /**
-     * Replays a product's ledger in date order with the moving weighted average, so sales after the
-     * reinstall carry the right cost now that older stock is known. Purchases and purchase returns keep
-     * their known cost; «موجودی اولیه» rows in [counts] become "stock counted = N" adjustments.
+     * Rebuilds a product's ledger in date order through the real [InventoryLedger] (FIFO batches), so
+     * documents from the older backup take the older batches and later sales get the right cost.
+     * Purchases keep their cost and batch price; sales and sale returns get new line costs; «موجودی اولیه»
+     * rows in [counts] become "stock counted = N" adjustments.
      */
-    private fun recost(productId: Long, counts: Set<Long>) {
-        val fallback = rows(w.query("SELECT lastPurchasePrice FROM products WHERE id = ?", arrayOf(productId))) { it.getLong(0) }.firstOrNull() ?: 0L
-        data class Mv(val id: Long, val tx: Long?, val reason: String, val qty: Long, val value: Long, val note: String?)
-        val moves = rows(w.query(
-            "SELECT id, transactionId, reason, quantityDeltaMilli, valueDelta, note FROM inventory_movements WHERE productId = ? ORDER BY occurredAt, id",
+    private suspend fun recost(productId: Long, counts: Set<Long>) {
+        data class Mv(val id: Long, val tx: Long?, val reason: String, val qty: Long, val value: Long, val note: String?, val at: Long, val salePrice: Long?)
+        val old = rows(w.query(
+            "SELECT id, transactionId, reason, quantityDeltaMilli, valueDelta, note, occurredAt, salePrice FROM inventory_movements " +
+                "WHERE productId = ? ORDER BY occurredAt, id",
             arrayOf(productId),
-        )) { Mv(it.getLong(0), it.longOrNull(1), it.getString(2), it.getLong(3), it.getLong(4), it.getStringOrNull(5)) }
-        val countedOf = HashMap<Long, Long>()
-        val txInfo = HashMap<Long, Pair<Long?, Long?>>() // tx → (originalId, reversesId)
-        fun info(tx: Long) = txInfo.getOrPut(tx) {
-            rows(w.query("SELECT originalId, reversesId FROM transactions WHERE id = ?", arrayOf(tx))) { it.longOrNull(0) to it.longOrNull(1) }.first()
+        )) { Mv(it.getLong(0), it.longOrNull(1), it.getString(2), it.getLong(3), it.getLong(4), it.getStringOrNull(5), it.getLong(6), it.longOrNull(7)) }
+        // One operation = consecutive rows of the same document/reason/time (a FIFO sale writes one row per batch).
+        val ops = mutableListOf<MutableList<Mv>>()
+        for (m in old) {
+            val last = ops.lastOrNull()?.last()
+            if (last != null && last.tx == m.tx && last.reason == m.reason && last.at == m.at && (m.tx != null || last.note == m.note)) ops.last() += m
+            else ops += mutableListOf(m)
         }
-        var pos = StockPosition()
-        val result = HashMap<Long, StockPosition.Movement>()
-        val byTx = HashMap<Long, MutableList<StockPosition.Movement>>()   // recomputed, in order, per transaction
-        val mirrored = HashMap<Long, Int>()                                // how many of a tx's moves were already reversed
+        w.execSQL("DELETE FROM inventory_movements WHERE productId = ?", arrayOf(productId))
+        val inv = db.inventoryDao()
+        fun txRow(tx: Long) = rows(w.query("SELECT type, originalId, reversesId FROM transactions WHERE id = ?", arrayOf(tx))) {
+            Triple(it.getString(0), it.longOrNull(1), it.longOrNull(2))
+        }.first()
+        fun items(tx: Long) = rows(w.query(
+            "SELECT id, quantityMilli, costTotal FROM transaction_items WHERE transactionId = ? AND productId = ? ORDER BY id",
+            arrayOf(tx, productId),
+        )) { Triple(it.getLong(0), it.getLong(1), it.getLong(2)) }
+        fun setCost(itemId: Long, cost: Long) = w.execSQL("UPDATE transaction_items SET costTotal = ? WHERE id = ?", arrayOf(cost, itemId))
+        val saleCost = HashMap<Long, Pair<Long, Long>>()   // sale tx → (qty, recomputed cost) of this product
 
-        for (m in moves) {
-            val mv: StockPosition.Movement = when {
-                m.id in counts -> {
+        for (op in ops) {
+            val f = op.first()
+            val qty = op.sumOf { it.qty }
+            val value = op.sumOf { it.value }
+            val price = op.firstNotNullOfOrNull { it.salePrice }
+            val reason = MovementReason.valueOf(f.reason)
+            val tx = f.tx
+            when {
+                op.any { it.id in counts } -> {
                     // The opening amount was a count of the shelf. Once rewritten, the counted amount lives in the note.
-                    val counted = countedFromNote(m.note) ?: m.qty
-                    countedOf[m.id] = counted
-                    val delta = counted - pos.quantityMilli
-                    if (delta == 0L) StockPosition.Movement(0, 0) else pos.adjust(delta, fallback).second
+                    val counted = op.firstNotNullOfOrNull { countedFromNote(it.note) } ?: qty
+                    val note = COUNT_PREFIX + PersianFormat.quantity(counted)
+                    val delta = counted - inv.stockFromLedger(productId)
+                    if (delta != 0L) ledger.adjust(productId, delta, note, f.at)
+                    else ledger.applyExact(
+                        productId, StockPosition.Movement(0, 0), reason, null, f.at, note,
+                        batchId = ledger.batches(productId).lastOrNull()?.id,
+                    )
                 }
-                m.reason == MovementReason.PURCHASE.name || m.reason == MovementReason.PURCHASE_RETURN.name ->
-                    StockPosition.Movement(m.qty, m.value)
-                m.reason == MovementReason.SALE.name -> pos.issue(-m.qty, fallback).second
-                m.reason == MovementReason.SALE_RETURN.name -> {
-                    val orig = m.tx?.let { info(it).first }?.let { byTx[it] }.orEmpty()
-                    val origQty = -orig.sumOf { it.quantityDeltaMilli }; val origCost = -orig.sumOf { it.valueDelta }
-                    val cost = if (origQty > 0) Money.divRoundHalfUp(origCost * m.qty, origQty) else m.value
-                    pos.receive(m.qty, cost.coerceAtLeast(0)).second
+                tx == null -> when {
+                    qty > 0 && (price != null || f.note == OPENING) ->
+                        ledger.receive(productId, qty, value, reason, null, f.at, f.note, salePrice = price)
+                    qty != 0L -> ledger.adjust(productId, qty, f.note ?: "اصلاح موجودی", f.at)
                 }
-                m.reason == MovementReason.REVERSAL.name -> {
-                    val target = m.tx?.let { info(it).second }
-                    val list = target?.let { byTx[it] }
-                    val k = target?.let { mirrored[it] ?: 0 } ?: 0
-                    val src = list?.getOrNull(k)
-                    if (src != null) { mirrored[target] = k + 1; StockPosition.Movement(-src.quantityDeltaMilli, -src.valueDelta) }
-                    else StockPosition.Movement(m.qty, m.value)
+                reason == MovementReason.PURCHASE && qty > 0 ->
+                    ledger.receive(productId, qty, value, reason, tx, f.at, salePrice = price)
+                reason == MovementReason.SALE -> {
+                    var q = 0L; var c = 0L
+                    for ((itemId, itemQty, _) in items(tx)) {
+                        val cost = -ledger.issue(productId, itemQty, reason, tx, f.at).valueDelta
+                        setCost(itemId, cost); q += itemQty; c += cost
+                    }
+                    saleCost[tx] = q to c
                 }
-                m.qty > 0 -> pos.adjust(m.qty, fallback).second
-                m.qty < 0 -> pos.adjust(m.qty, fallback).second
-                else -> StockPosition.Movement(0, 0)
-            }
-            pos = pos.apply(mv)
-            result[m.id] = mv
-            m.tx?.let { byTx.getOrPut(it) { mutableListOf() } += mv }
-        }
-
-        for (m in moves) {
-            val mv = result.getValue(m.id)
-            if (mv.quantityDeltaMilli != m.qty || mv.valueDelta != m.value) {
-                w.execSQL("UPDATE inventory_movements SET quantityDeltaMilli = ?, valueDelta = ? WHERE id = ?", arrayOf(mv.quantityDeltaMilli, mv.valueDelta, m.id))
-            }
-            countedOf[m.id]?.let { counted ->
-                w.execSQL("UPDATE inventory_movements SET note = ? WHERE id = ?", arrayOf(COUNT_PREFIX + PersianFormat.quantity(counted), m.id))
-            }
-        }
-        // Line costs of sales and sale returns follow their movements (same order per transaction).
-        for ((tx, mvs) in byTx) {
-            val items = rows(w.query(
-                "SELECT i.id FROM transaction_items i JOIN transactions t ON t.id = i.transactionId " +
-                    "WHERE i.transactionId = ? AND i.productId = ? AND t.type IN ('SALE','SALE_RETURN') ORDER BY i.id",
-                arrayOf(tx, productId),
-            )) { it.getLong(0) }
-            items.zip(mvs).forEach { (itemId, mv) ->
-                w.execSQL("UPDATE transaction_items SET costTotal = ? WHERE id = ?", arrayOf(Math.abs(mv.valueDelta), itemId))
+                reason == MovementReason.SALE_RETURN -> {
+                    val orig = txRow(tx).second
+                    val (oq, oc) = orig?.let { saleCost[it] } ?: (0L to 0L)
+                    val soldFrom = orig?.let { o -> inv.forTransaction(o).filter { it.productId == productId } }.orEmpty()
+                    for ((itemId, itemQty, itemCost) in items(tx)) {
+                        val cost = if (oq > 0) Money.divRoundHalfUp(oc * itemQty, oq) else itemCost
+                        setCost(itemId, ledger.returnFromCustomer(productId, itemQty, cost, soldFrom, tx, f.at))
+                    }
+                }
+                reason == MovementReason.PURCHASE_RETURN -> {
+                    val orig = txRow(tx).second
+                    val bought = orig?.let { o -> inv.forTransaction(o).filter { it.productId == productId } }.orEmpty()
+                    if (qty < 0) ledger.returnToSupplier(productId, -qty, -value, bought, tx, f.at)
+                }
+                reason == MovementReason.REVERSAL -> {
+                    val target = txRow(tx).third
+                    val src = target?.let { t -> inv.forTransaction(t).filter { it.productId == productId } }.orEmpty()
+                    if (src.isNotEmpty()) src.forEach { m ->
+                        ledger.applyExact(productId, StockPosition.Movement(-m.quantityDeltaMilli, -m.valueDelta), reason, tx, f.at, f.note, batchId = m.batchId)
+                    } else if (qty != 0L) {
+                        ledger.applyExact(productId, StockPosition.Movement(qty, value), reason, tx, f.at, f.note)
+                    }
+                }
+                qty != 0L -> ledger.applyExact(productId, StockPosition.Movement(qty, value), reason, tx, f.at, f.note)
             }
         }
     }

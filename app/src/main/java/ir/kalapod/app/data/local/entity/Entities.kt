@@ -124,7 +124,7 @@ data class TransactionItemEntity(
     /** Price per one whole unit. */
     val unitPrice: Long,
     val lineTotal: Long,
-    /** Cost of goods for this line (sales/returns), from moving average at posting time. */
+    /** Cost of goods for this line (sales/returns), from the FIFO batches it was taken from. */
     val costTotal: Long = 0,
 )
 
@@ -135,7 +135,7 @@ data class TransactionItemEntity(
         ForeignKey(ProductEntity::class, ["id"], ["productId"], onDelete = ForeignKey.RESTRICT),
         ForeignKey(TransactionEntity::class, ["id"], ["transactionId"], onDelete = ForeignKey.RESTRICT),
     ],
-    indices = [Index("productId", "occurredAt"), Index("transactionId")],
+    indices = [Index("productId", "occurredAt"), Index("transactionId"), Index("batchId")],
 )
 data class InventoryMovementEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -147,6 +147,13 @@ data class InventoryMovementEntity(
     /** Required for ADJUSTMENT. */
     val note: String? = null,
     val occurredAt: Long,
+    /**
+     * The stock batch (بار) this movement belongs to: the id of the movement that brought the batch in.
+     * A batch's remaining stock/value = SUM over its movements. Goods leave the oldest batch first (FIFO).
+     */
+    val batchId: Long? = null,
+    /** Sale price of the batch; set only on the movement that brought it in. */
+    val salePrice: Long? = null,
 )
 
 @Entity(

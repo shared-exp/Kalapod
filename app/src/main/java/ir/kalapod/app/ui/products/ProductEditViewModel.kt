@@ -64,6 +64,8 @@ class ProductEditViewModel @Inject constructor(
         val price = if (f.purchasePrice.isBlank()) null else InputParser.money(f.purchasePrice, f.currency)
         pending.items = listOf(p.id to qty)
         pending.prices = if (price != null && price > 0) mapOf(p.id to price) else emptyMap()
+        val sale = if (f.salePrice.isBlank()) null else InputParser.money(f.salePrice, f.currency)
+        pending.salePrices = if (sale != null && sale > 0) mapOf(p.id to sale) else emptyMap()
         duplicate.value = null
     }
 

@@ -101,9 +101,12 @@ class MergeTest {
         // Dates are the original ones, so the list is in true time order.
         assertEquals(listOf("new-s", "new-p", "old-s", "old-p"), docs.map { it.tx.clientUuid })
 
-        // The new sale's cost is recomputed knowing the old stock: (8×100k + 5×120k) / 13 × 3.
+        // The new sale is recomputed knowing the old stock: it takes the oldest batch first (3 × 100k).
         val cost = current.transactionDao().items(byUuid.getValue("new-s").tx.id).single().costTotal
-        assertEquals(Math.round(1_400_000.0 * 3 / 13), cost)
+        assertEquals(300_000L, cost)
+        val batches = ledger.batches(p.id).filter { it.remainingMilli > 0 }
+        assertEquals(listOf(5_000L, 5_000L), batches.map { it.remainingMilli })          // 5 old @100k, then the 5 @120k
+        assertEquals(listOf(500_000L, 600_000L), batches.map { it.remainingValue })
 
         // The old credit customer came along with the right balance (300k − 100k paid).
         val bal = PartyRepository(current).observeBalances(PartyKind.CUSTOMER).first().single()

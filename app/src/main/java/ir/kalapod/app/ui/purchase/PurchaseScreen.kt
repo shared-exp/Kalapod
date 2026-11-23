@@ -87,7 +87,7 @@ fun PurchaseScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             itemsIndexed(s.lines, key = { _, l -> l.productId }) { i, line ->
-                CartLineCard(line, cur, onChange = { vm.updateLine(i, it) }, onRemove = { vm.removeLine(i) })
+                CartLineCard(line, cur, onChange = { vm.updateLine(i, it) }, onRemove = { vm.removeLine(i) }, showSalePrice = true)
             }
             item {
                 AddItemsRow(

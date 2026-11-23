@@ -19,6 +19,7 @@ import ir.kalapod.app.domain.finance.DocumentTotals
 import ir.kalapod.app.ui.cart.CartLine
 import ir.kalapod.app.ui.cart.Settlement
 import ir.kalapod.app.ui.cart.addOrIncrement
+import ir.kalapod.app.ui.cart.withSalePrice
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -75,7 +76,7 @@ class PurchaseViewModel @Inject constructor(
     fun edit(f: (PurchaseState) -> PurchaseState) = _state.update { f(it).copy(error = null) }
 
     fun add(p: ProductEntity) = edit { s ->
-        s.copy(lines = s.lines.addOrIncrement(CartLine.of(p, p.lastPurchasePrice, s.currency)))
+        s.copy(lines = s.lines.addOrIncrement(CartLine.of(p, p.lastPurchasePrice, s.currency).withSalePrice(p, s.currency)))
     }
 
     fun updateLine(index: Int, line: CartLine) = edit { s -> s.copy(lines = s.lines.toMutableList().also { it[index] = line }) }
@@ -174,7 +175,7 @@ class PurchaseViewModel @Inject constructor(
             edit { s ->
                 var ls = s.lines
                 fetched.forEach { (p, l) ->
-                    ls = ls.addOrIncrement(CartLine.of(p, l.unitPrice ?: p.lastPurchasePrice, s.currency, l.quantityMilli))
+                    ls = ls.addOrIncrement(CartLine.of(p, l.unitPrice ?: p.lastPurchasePrice, s.currency, l.quantityMilli).withSalePrice(p, s.currency))
                 }
                 s.copy(
                     lines = ls,
@@ -194,13 +195,15 @@ class PurchaseViewModel @Inject constructor(
     fun consumePending() {
         val items = pending.items ?: return
         val prices = pending.prices
+        val salePrices = pending.salePrices
         pending.items = null
         pending.prices = emptyMap()
+        pending.salePrices = emptyMap()
         viewModelScope.launch {
             val fetched = items.mapNotNull { (id, q) -> products.get(id)?.let { it to q } }
             edit { s ->
                 var ls = s.lines
-                fetched.forEach { (p, q) -> ls = ls.addOrIncrement(CartLine.of(p, prices[p.id] ?: p.lastPurchasePrice, s.currency, q)) }
+                fetched.forEach { (p, q) -> ls = ls.addOrIncrement(CartLine.of(p, prices[p.id] ?: p.lastPurchasePrice, s.currency, q).withSalePrice(p, s.currency, salePrices[p.id])) }
                 s.copy(lines = ls)
             }
         }

@@ -60,6 +60,8 @@ class PendingPurchase @Inject constructor() {
     @Volatile var items: List<Pair<Long, Long>>? = null
     /** Optional unit purchase price per product (rial), e.g. the new price of a new batch. */
     @Volatile var prices: Map<Long, Long> = emptyMap()
+    /** Optional sale price of the new batch per product (rial). */
+    @Volatile var salePrices: Map<Long, Long> = emptyMap()
 }
 
 data class SuggestionRow(val forecast: ProductForecast, val selected: Boolean, val qtyText: String)

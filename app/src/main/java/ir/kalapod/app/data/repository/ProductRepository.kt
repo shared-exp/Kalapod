@@ -7,6 +7,7 @@ import ir.kalapod.app.data.local.entity.MovementReason
 import ir.kalapod.app.data.local.entity.ProductBarcodeEntity
 import ir.kalapod.app.data.local.entity.ProductEntity
 import ir.kalapod.app.data.local.entity.ProductUnit
+import ir.kalapod.app.domain.finance.Fifo
 import ir.kalapod.app.domain.finance.Money
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -90,6 +91,10 @@ class ProductRepository @Inject constructor(
                         leadTimeDays = d.leadTimeDays, updatedAt = now,
                     ),
                 )
+                // A new sale price applies to the batch now on sale; later batches keep their own prices.
+                if (d.salePrice != old.salePrice) {
+                    Fifo.front(ledger.batches(d.id))?.let { db.inventoryDao().setBatchPrice(it.id, d.salePrice) }
+                }
                 d.id
             }
 
@@ -100,6 +105,7 @@ class ProductRepository @Inject constructor(
                 ledger.receive(
                     id, d.openingStockMilli, Money.lineTotal(d.purchasePrice, d.openingStockMilli),
                     MovementReason.ADJUSTMENT, transactionId = null, at = now, note = "موجودی اولیه",
+                    salePrice = d.salePrice,
                 )
             } else {
                 ledger.refreshAlert(products.get(id)!!, now)
@@ -123,6 +129,15 @@ class ProductRepository @Inject constructor(
             null
         }
     }
+
+    /** How [quantityMilli] of a product is priced if sold now: oldest batch first, each at its own price. */
+    suspend fun priceTiers(productId: Long, quantityMilli: Long): List<Fifo.PriceTier> {
+        val p = products.get(productId) ?: return emptyList()
+        return Fifo.priceTiers(ledger.batches(productId), quantityMilli, p.salePrice)
+    }
+
+    /** Batches still in stock, oldest first. */
+    suspend fun batchesInStock(productId: Long): List<Fifo.Batch> = ledger.batches(productId).filter { it.remainingMilli > 0 }
 
     fun observeMovements(productId: Long) = db.inventoryDao().observeForProduct(productId)
 

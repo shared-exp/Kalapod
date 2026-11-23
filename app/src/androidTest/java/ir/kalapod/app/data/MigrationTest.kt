@@ -42,4 +42,27 @@ class MigrationTest {
         db.close()
         ctx.deleteDatabase(name)
     }
+
+    /** v2 → v3: each product's whole history becomes one opening batch holding exactly today's stock, at today's price. */
+    @Test fun v2ToV3MakesOneOpeningBatch(): Unit = runBlocking {
+        val n = "migration-test-3.db"
+        helper.createDatabase(n, 2).apply {
+            execSQL(
+                "INSERT INTO products (id, name, unit, salePrice, lastPurchasePrice, minStockMilli, stockMilli, stockValue, " +
+                    "leadTimeDays, isArchived, createdAt, updatedAt) VALUES (1, 'Test', 'PIECE', 10000, 8000, 0, 15000, 120000, 1, 0, 0, 0)",
+            )
+            execSQL("INSERT INTO inventory_movements (productId, reason, quantityDeltaMilli, valueDelta, occurredAt) VALUES (1, 'ADJUSTMENT', 20000, 160000, 1)")
+            execSQL("INSERT INTO inventory_movements (productId, reason, quantityDeltaMilli, valueDelta, occurredAt) VALUES (1, 'ADJUSTMENT', -5000, -40000, 2)")
+            close()
+        }
+        helper.runMigrationsAndValidate(n, 3, true, *KalapodDatabase.MIGRATIONS).close()
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = Room.databaseBuilder(ctx, KalapodDatabase::class.java, n).addMigrations(*KalapodDatabase.MIGRATIONS).build()
+        val b = db.inventoryDao().batches(1).single()
+        assertEquals(15_000L, b.remainingMilli)
+        assertEquals(120_000L, b.remainingValue)
+        assertEquals(10_000L, b.salePrice)
+        db.close()
+        ctx.deleteDatabase(n)
+    }
 }

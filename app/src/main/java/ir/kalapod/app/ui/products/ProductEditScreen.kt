@@ -206,7 +206,7 @@ fun ProductEditScreen(
             text = {
                 Text(
                     "«${existing.name}» با موجودی ${PersianFormat.quantity(existing.stockMilli)} ${existing.unit.label} ثبت شده است.\n" +
-                        "بار جدید (حتی با قیمت متفاوت) را به‌صورت خرید ثبت کنید؛ موجودی اضافه می‌شود و قیمت تمام‌شده میانگین می‌شود.",
+                        "بار جدید را با قیمت خودش به‌صورت خرید ثبت کنید. تا بار قبلی تمام نشده، با قیمت قبلی فروخته می‌شود؛ بعد قیمت بار جدید اعمال می‌شود.",
                 )
             },
             confirmButton = { TextButton(onClick = { vm.registerNewBatch(); onNewBatch() }) { Text("ثبت بار جدید") } },

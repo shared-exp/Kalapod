@@ -99,9 +99,26 @@ interface InventoryDao {
     @Query("SELECT * FROM inventory_movements WHERE productId = :productId ORDER BY occurredAt DESC, id DESC")
     fun observeForProduct(productId: Long): Flow<List<InventoryMovementEntity>>
 
-    @Query("SELECT * FROM inventory_movements WHERE transactionId = :txId")
+    @Query("SELECT * FROM inventory_movements WHERE transactionId = :txId ORDER BY id")
     suspend fun forTransaction(txId: Long): List<InventoryMovementEntity>
+
+    @Query("UPDATE inventory_movements SET batchId = id, salePrice = :salePrice WHERE id = :id")
+    suspend fun makeBatchHead(id: Long, salePrice: Long?)
+
+    /** Batches of a product, oldest first, with what is left of each. */
+    @Query(
+        "SELECT h.id AS batchId, h.occurredAt AS receivedAt, h.salePrice AS salePrice, " +
+            "COALESCE(SUM(m.quantityDeltaMilli),0) AS remainingMilli, COALESCE(SUM(m.valueDelta),0) AS remainingValue " +
+            "FROM inventory_movements h JOIN inventory_movements m ON m.batchId = h.id " +
+            "WHERE h.productId = :productId AND h.batchId = h.id GROUP BY h.id ORDER BY h.occurredAt, h.id",
+    )
+    suspend fun batches(productId: Long): List<BatchRow>
+
+    @Query("UPDATE inventory_movements SET salePrice = :salePrice WHERE id = :batchId")
+    suspend fun setBatchPrice(batchId: Long, salePrice: Long)
 }
+
+data class BatchRow(val batchId: Long, val receivedAt: Long, val salePrice: Long?, val remainingMilli: Long, val remainingValue: Long)
 
 @Dao
 interface TransactionDao {

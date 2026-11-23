@@ -34,7 +34,7 @@ import ir.kalapod.app.data.local.entity.TransactionItemEntity
         InvoiceEntity::class, PaymentEntity::class, StockAlertEntity::class, SettingEntity::class,
         ir.kalapod.app.data.local.entity.ProductAliasEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -68,6 +68,25 @@ abstract class KalapodDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_product_aliases_productId` ON `product_aliases` (`productId`)")
             }
         }
-        val MIGRATIONS = arrayOf(MIGRATION_1_2)
+        /**
+         * v3: stock batches (FIFO, each with its own cost and sale price). All existing history of a product
+         * becomes one opening batch — its remaining stock and value are exactly today's — priced at today's sale price.
+         */
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `inventory_movements` ADD COLUMN `batchId` INTEGER")
+                db.execSQL("ALTER TABLE `inventory_movements` ADD COLUMN `salePrice` INTEGER")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_inventory_movements_batchId` ON `inventory_movements` (`batchId`)")
+                db.execSQL(
+                    "UPDATE inventory_movements SET batchId = (SELECT MIN(m.id) FROM inventory_movements m " +
+                        "WHERE m.productId = inventory_movements.productId)",
+                )
+                db.execSQL(
+                    "UPDATE inventory_movements SET salePrice = (SELECT p.salePrice FROM products p " +
+                        "WHERE p.id = inventory_movements.productId) WHERE id = batchId",
+                )
+            }
+        }
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
     }
 }

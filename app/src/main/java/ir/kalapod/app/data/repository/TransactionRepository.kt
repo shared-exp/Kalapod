@@ -117,7 +117,7 @@ class TransactionRepository @Inject constructor(
                 },
             )
             d.lines.forEachIndexed { i, l ->
-                ledger.receive(l.productId, l.quantityMilli, totals.netLineValues[i], MovementReason.PURCHASE, txId, d.occurredAt)
+                ledger.receive(l.productId, l.quantityMilli, totals.netLineValues[i], MovementReason.PURCHASE, txId, d.occurredAt, salePrice = l.salePrice)
                 val p = db.productDao().get(l.productId)!!
                 db.productDao().update(p.copy(lastPurchasePrice = l.unitPrice, updatedAt = now))
             }
@@ -165,7 +165,7 @@ class TransactionRepository @Inject constructor(
                     total = totals.total, note = d.note, createdAt = now,
                 ),
             )
-            // Issue stock first so each line records its cost at the moving average.
+            // Issue stock first so each line records its cost from the batches it was taken from (oldest first).
             val costs = d.lines.map { l ->
                 -ledger.issue(l.productId, l.quantityMilli, MovementReason.SALE, txId, d.occurredAt).valueDelta
             }
@@ -217,7 +217,7 @@ class TransactionRepository @Inject constructor(
             db.inventoryDao().forTransaction(originalId).forEach { m ->
                 ledger.applyExact(
                     m.productId, StockPosition.Movement(-m.quantityDeltaMilli, -m.valueDelta),
-                    MovementReason.REVERSAL, revId, at, "ابطال سند",
+                    MovementReason.REVERSAL, revId, at, "ابطال سند", batchId = m.batchId,
                 )
             }
             db.paymentDao().forTransaction(originalId).filter { it.reversesPaymentId == null }.forEach { p ->
@@ -289,21 +289,19 @@ class TransactionRepository @Inject constructor(
                     note = d.note, createdAt = now,
                 ),
             )
-            dao.insertItems(
-                calcs.map {
-                    TransactionItemEntity(
-                        transactionId = txId, productId = it.productId, quantityMilli = it.qty,
-                        unitPrice = it.unitPrice, lineTotal = it.lineTotal, costTotal = it.cost,
-                    )
-                },
-            )
+            val origMoves = db.inventoryDao().forTransaction(orig.id)
             calcs.forEach { c ->
-                if (isSale) {
-                    ledger.receive(c.productId, c.qty, c.cost, MovementReason.SALE_RETURN, txId, d.occurredAt)
-                } else {
-                    // Goods go back to the supplier at the cost they came in with.
-                    ledger.applyExact(c.productId, StockPosition.Movement(-c.qty, -c.cost), MovementReason.PURCHASE_RETURN, txId, d.occurredAt)
-                }
+                val mine = origMoves.filter { it.productId == c.productId }
+                val cost = if (isSale) ledger.returnFromCustomer(c.productId, c.qty, c.cost, mine, txId, d.occurredAt, dao.returnedQuantity(orig.id, c.productId))
+                else c.cost.also { ledger.returnToSupplier(c.productId, c.qty, c.cost, mine, txId, d.occurredAt) }
+                dao.insertItems(
+                    listOf(
+                        TransactionItemEntity(
+                            transactionId = txId, productId = c.productId, quantityMilli = c.qty,
+                            unitPrice = c.unitPrice, lineTotal = c.lineTotal, costTotal = cost,
+                        ),
+                    ),
+                )
             }
             if (d.refundAmount > 0) {
                 db.paymentDao().insert(

@@ -49,6 +49,8 @@ fun CartLineCard(
     onChange: (CartLine) -> Unit,
     onRemove: () -> Unit,
     warning: String? = null,
+    /** Purchases: let the user set this batch's own sale price. */
+    showSalePrice: Boolean = false,
 ) {
     Card(
         Modifier.fillMaxWidth(),
@@ -73,6 +75,23 @@ fun CartLineCard(
                     line.priceText, { onChange(line.copy(priceText = it)) },
                     label = { Text("قیمت واحد (${currency.label})") }, singleLine = true, modifier = Modifier.weight(1.4f),
                     isError = line.unitPrice(currency) == null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+            val tiers = line.tiers(currency)
+            if (tiers != null && tiers.size > 1) {
+                Text(
+                    "اول بار قدیمی: " + tiers.joinToString(" + ") {
+                        "${PersianFormat.quantity(it.quantityMilli)} × ${PersianFormat.money(it.price, currency)}"
+                    },
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (showSalePrice) {
+                OutlinedTextField(
+                    line.salePriceText, { onChange(line.copy(salePriceText = it)) },
+                    label = { Text("قیمت فروش این بار (${currency.label})") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
             }

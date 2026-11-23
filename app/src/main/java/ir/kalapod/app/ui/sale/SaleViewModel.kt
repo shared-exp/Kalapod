@@ -75,7 +75,12 @@ class SaleViewModel @Inject constructor(
 
     fun edit(f: (SaleState) -> SaleState) = _state.update { f(it).copy(error = null) }
 
-    fun add(p: ProductEntity) = edit { s -> s.copy(lines = s.lines.addOrIncrement(CartLine.of(p, p.salePrice, s.currency))) }
+    fun add(p: ProductEntity) {
+        viewModelScope.launch {
+            val batches = products.batchesInStock(p.id)
+            edit { s -> s.copy(lines = s.lines.addOrIncrement(CartLine.of(p, p.salePrice, s.currency, batches = batches))) }
+        }
+    }
     fun updateLine(i: Int, line: CartLine) = edit { s -> s.copy(lines = s.lines.toMutableList().also { it[i] = line }) }
     fun removeLine(i: Int) = edit { s -> s.copy(lines = s.lines.filterIndexed { j, _ -> j != i }) }
 
@@ -86,7 +91,7 @@ class SaleViewModel @Inject constructor(
     }
 
     fun totals(s: SaleState): DocumentTotals? {
-        val inputs = s.lines.map { it.toInput(s.currency) ?: return null }
+        val inputs = s.lines.flatMap { it.toInputs(s.currency) ?: return null }
         val discount = optional(s.discountText, s.currency) ?: return null
         if (DocumentCalculator.validate(inputs, discount, 0) != null) return null
         return DocumentCalculator.compute(inputs, discount, 0)
@@ -129,7 +134,7 @@ class SaleViewModel @Inject constructor(
         viewModelScope.launch {
             val r = transactions.postSale(
                 SaleDraft(
-                    clientUuid = s.clientUuid, lines = s.lines.map { it.toInput(s.currency)!! },
+                    clientUuid = s.clientUuid, lines = s.lines.flatMap { it.toInputs(s.currency)!! },
                     discount = t.discount, customer = customer, receivedAmount = receivedNow(s, t),
                     receivedMethod = if (s.settlement == Settlement.CARD) PaymentMethod.CARD else PaymentMethod.CASH,
                     allowOversell = allowOversell,
@@ -168,11 +173,11 @@ class SaleViewModel @Inject constructor(
     /** Adds confirmed voice lines; also takes the spoken party/payment if the user hasn't set them. */
     fun applyVoice(lines: List<ir.kalapod.app.domain.voice.ResolvedLine>, cmd: ir.kalapod.app.domain.voice.ParsedCommand) {
         viewModelScope.launch {
-            val fetched = lines.mapNotNull { l -> products.get(l.product!!.id)?.let { it to l } }
+            val fetched = lines.mapNotNull { l -> products.get(l.product!!.id)?.let { Triple(it, l, products.batchesInStock(it.id)) } }
             edit { s ->
                 var ls = s.lines
-                fetched.forEach { (p, l) ->
-                    ls = ls.addOrIncrement(CartLine.of(p, l.unitPrice ?: p.salePrice, s.currency, l.quantityMilli))
+                fetched.forEach { (p, l, batches) ->
+                    ls = ls.addOrIncrement(CartLine.of(p, l.unitPrice ?: p.salePrice, s.currency, l.quantityMilli, batches))
                 }
                 s.copy(
                     lines = ls,

@@ -6,6 +6,8 @@ import ir.kalapod.app.data.local.entity.MovementReason
 import ir.kalapod.app.data.local.entity.ProductEntity
 import ir.kalapod.app.data.local.entity.StockAlertEntity
 import ir.kalapod.app.data.local.entity.StockAlertType
+import ir.kalapod.app.domain.finance.Fifo
+import ir.kalapod.app.domain.finance.Money
 import ir.kalapod.app.domain.finance.StockPosition
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,69 +22,158 @@ import javax.inject.Singleton
 @Singleton
 class InventoryLedger @Inject constructor(private val db: KalapodDatabase) {
 
-    /** Goods in at known total cost (purchase, sale return, opening stock). Returns the movement. */
+    /**
+     * Goods in at a known total cost. Without [intoBatch] this is a new batch (purchase, opening stock)
+     * priced at [salePrice] (default: the product's current price); with it, the goods go back into that
+     * batch (a sale return puts goods back where they came from). Returns the net movement.
+     */
     suspend fun receive(
         productId: Long, quantityMilli: Long, totalCost: Long, reason: MovementReason,
-        transactionId: Long?, at: Long, note: String? = null,
+        transactionId: Long?, at: Long, note: String? = null, salePrice: Long? = null, intoBatch: Long? = null,
     ): StockPosition.Movement {
         val p = product(productId)
-        val (_, m) = position(p).receive(quantityMilli, totalCost)
-        write(p, m, reason, transactionId, at, note)
+        val (_, m) = StockPosition().receive(quantityMilli, totalCost)
+        if (intoBatch != null) {
+            insert(p.id, m, reason, transactionId, at, note, intoBatch)
+            return refresh(p.id, at).let { m }
+        }
+        val head = insert(p.id, m, reason, transactionId, at, note, batchId = null)
+        db.inventoryDao().makeBatchHead(head, salePrice ?: p.salePrice)
+        // Goods sold before they were in stock (a knowingly confirmed oversell) come out of this batch now.
+        var batch = StockPosition(quantityMilli, totalCost)
+        for (b in batches(p.id)) {
+            if (b.id == head || b.remainingMilli >= 0 || batch.quantityMilli <= 0) continue
+            val (rest, out) = batch.issue(minOf(-b.remainingMilli, batch.quantityMilli), fallbackUnitCost = 0)
+            insert(p.id, out, reason, transactionId, at, note, head)
+            insert(p.id, StockPosition.Movement(-out.quantityDeltaMilli, -out.valueDelta), reason, transactionId, at, note, b.id)
+            batch = rest
+        }
+        refresh(p.id, at)
         return m
     }
 
-    /** Goods out at moving average cost (sale, purchase return). Returns the movement (valueDelta < 0). */
+    /** Goods out, oldest batch first (sale, stock count shortfall). Returns the net movement (valueDelta < 0). */
     suspend fun issue(
         productId: Long, quantityMilli: Long, reason: MovementReason,
         transactionId: Long?, at: Long, note: String? = null,
     ): StockPosition.Movement {
         val p = product(productId)
-        val (_, m) = position(p).issue(quantityMilli, fallbackUnitCost = p.lastPurchasePrice)
-        write(p, m, reason, transactionId, at, note)
-        return m
+        val takes = Fifo.take(batches(p.id), quantityMilli, fallbackUnitCost = p.lastPurchasePrice)
+        takes.forEach { t ->
+            insert(p.id, StockPosition.Movement(-t.quantityMilli, -t.cost), reason, transactionId, at, note, t.batchId)
+                .also { id -> if (t.batchId == null) db.inventoryDao().makeBatchHead(id, p.salePrice) }
+        }
+        refresh(p.id, at)
+        return StockPosition.Movement(-quantityMilli, -takes.sumOf { it.cost })
     }
 
-    /** Manual stock correction; a reason note is mandatory (SPEC §5). */
+    /** Manual stock correction; a reason note is mandatory (SPEC §5). Extra goods join the batch on sale. */
     suspend fun adjust(productId: Long, deltaMilli: Long, note: String, at: Long): StockPosition.Movement {
         require(note.isNotBlank()) { "adjustment requires a reason" }
+        require(deltaMilli != 0L) { "delta must be non-zero" }
+        if (deltaMilli < 0) return issue(productId, -deltaMilli, MovementReason.ADJUSTMENT, null, at, note)
         val p = product(productId)
-        val (_, m) = position(p).adjust(deltaMilli, fallbackUnitCost = p.lastPurchasePrice)
-        write(p, m, MovementReason.ADJUSTMENT, null, at, note)
-        return m
+        val front = Fifo.front(batches(p.id))
+        val unitCost = front?.let { StockPosition(it.remainingMilli, it.remainingValue).averageUnitCost } ?: p.lastPurchasePrice
+        val cost = Money.lineTotal(unitCost, deltaMilli)
+        return if (front != null) {
+            receive(p.id, deltaMilli, cost, MovementReason.ADJUSTMENT, null, at, note, intoBatch = front.id)
+        } else {
+            receive(p.id, deltaMilli, cost, MovementReason.ADJUSTMENT, null, at, note)
+        }
     }
 
-    /** Applies an exact pre-computed movement (used by reversals to undo a document precisely). */
+    /**
+     * Applies an exact pre-computed movement to a given batch (reversals mirror each movement into its own
+     * batch; a purchase return takes from the batch the purchase brought in). Null batch = a batch of its own.
+     */
     suspend fun applyExact(
         productId: Long, movement: StockPosition.Movement, reason: MovementReason,
-        transactionId: Long?, at: Long, note: String? = null,
-    ) = write(product(productId), movement, reason, transactionId, at, note)
+        transactionId: Long?, at: Long, note: String? = null, batchId: Long? = null,
+    ) {
+        val id = insert(productId, movement, reason, transactionId, at, note, batchId)
+        if (batchId == null) db.inventoryDao().makeBatchHead(id, product(productId).salePrice)
+        refresh(productId, at)
+    }
+
+    /**
+     * Sale return: goods go back into the batches [soldFrom] took them from (newest first), each piece at
+     * the cost it left with ([alreadyReturned] = units of that sale returned before). Anything beyond becomes a batch of its own at [fallbackCost]. Returns the cost.
+     */
+    suspend fun returnFromCustomer(
+        productId: Long, qty: Long, fallbackCost: Long, soldFrom: List<InventoryMovementEntity>, txId: Long, at: Long,
+        alreadyReturned: Long = 0,
+    ): Long {
+        var left = qty
+        var skip = alreadyReturned       // earlier returns of the same sale already went back to the newest pieces
+        var total = 0L
+        for (m in soldFrom.filter { it.quantityDeltaMilli < 0 }.asReversed()) {
+            if (left == 0L) break
+            val skipped = minOf(skip, -m.quantityDeltaMilli)
+            skip -= skipped
+            val q = minOf(left, -m.quantityDeltaMilli - skipped)
+            if (q == 0L) continue
+            val part = Money.divRoundHalfUp(-m.valueDelta * q, -m.quantityDeltaMilli)
+            receive(productId, q, part, MovementReason.SALE_RETURN, txId, at, intoBatch = m.batchId)
+            left -= q; total += part
+        }
+        if (left > 0) {
+            val part = Money.divRoundHalfUp(fallbackCost * left, qty)
+            receive(productId, left, part, MovementReason.SALE_RETURN, txId, at)
+            total += part
+        }
+        return total
+    }
+
+    /**
+     * Purchase return: goods leave the batch [purchaseMoves] brought in, at [cost]; if that batch has
+     * already been partly sold, the rest comes from the oldest stock.
+     */
+    suspend fun returnToSupplier(
+        productId: Long, qty: Long, cost: Long, purchaseMoves: List<InventoryMovementEntity>, txId: Long, at: Long,
+    ) {
+        val head = purchaseMoves.firstOrNull { it.batchId == it.id }?.id
+        val inBatch = head?.let { h -> batches(productId).firstOrNull { it.id == h }?.remainingMilli } ?: 0L
+        val own = minOf(qty, inBatch.coerceAtLeast(0))
+        if (own > 0) {
+            val ownCost = Money.divRoundHalfUp(cost * own, qty)
+            applyExact(productId, StockPosition.Movement(-own, -ownCost), MovementReason.PURCHASE_RETURN, txId, at, batchId = head)
+        }
+        if (qty > own) issue(productId, qty - own, MovementReason.PURCHASE_RETURN, txId, at)
+    }
+
+    /** Batches of a product, oldest first. */
+    suspend fun batches(productId: Long): List<Fifo.Batch> =
+        db.inventoryDao().batches(productId).map { Fifo.Batch(it.batchId, it.remainingMilli, it.remainingValue, it.salePrice) }
 
     /** Recomputes the cache from the ledger (integrity repair / after restore). */
-    suspend fun rebuildCache(productId: Long, at: Long) {
-        val inv = db.inventoryDao()
-        db.productDao().setStockCache(productId, inv.stockFromLedger(productId), inv.valueFromLedger(productId), at)
-        refreshAlert(product(productId), at)
-    }
+    suspend fun rebuildCache(productId: Long, at: Long) = refresh(productId, at)
 
     private suspend fun product(id: Long): ProductEntity =
         db.productDao().get(id) ?: error("product $id not found")
 
-    private fun position(p: ProductEntity) = StockPosition(p.stockMilli, p.stockValue)
+    private suspend fun insert(
+        productId: Long, m: StockPosition.Movement, reason: MovementReason,
+        transactionId: Long?, at: Long, note: String?, batchId: Long?,
+    ): Long = db.inventoryDao().insert(
+        InventoryMovementEntity(
+            productId = productId, transactionId = transactionId, reason = reason,
+            quantityDeltaMilli = m.quantityDeltaMilli, valueDelta = m.valueDelta, note = note, occurredAt = at,
+            batchId = batchId,
+        ),
+    )
 
-    private suspend fun write(
-        p: ProductEntity, m: StockPosition.Movement, reason: MovementReason,
-        transactionId: Long?, at: Long, note: String?,
-    ) {
-        db.inventoryDao().insert(
-            InventoryMovementEntity(
-                productId = p.id, transactionId = transactionId, reason = reason,
-                quantityDeltaMilli = m.quantityDeltaMilli, valueDelta = m.valueDelta, note = note, occurredAt = at,
-            ),
-        )
-        val stock = p.stockMilli + m.quantityDeltaMilli
-        val value = p.stockValue + m.valueDelta
-        db.productDao().setStockCache(p.id, stock, value, at)
-        refreshAlert(p.copy(stockMilli = stock, stockValue = value), at)
+    /** Cache = ledger sums; the shelf price = the price of the batch now on sale. */
+    private suspend fun refresh(productId: Long, at: Long) {
+        val inv = db.inventoryDao()
+        db.productDao().setStockCache(productId, inv.stockFromLedger(productId), inv.valueFromLedger(productId), at)
+        var p = product(productId)
+        val price = Fifo.front(batches(productId))?.salePrice
+        if (price != null && price != p.salePrice) {
+            p = p.copy(salePrice = price, updatedAt = at)
+            db.productDao().update(p)
+        }
+        refreshAlert(p, at)
     }
 
     /** Keeps at most one open alert per product, matching its current stock level. */

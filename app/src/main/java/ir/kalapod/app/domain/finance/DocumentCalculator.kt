@@ -1,7 +1,8 @@
 package ir.kalapod.app.domain.finance
 
 /** One line of a purchase/sale document. [unitPrice] is per whole unit, in rial. */
-data class LineInput(val productId: Long, val quantityMilli: Long, val unitPrice: Long)
+/** [salePrice]: purchases only — the sale price of the batch this line brings in (null = keep the current one). */
+data class LineInput(val productId: Long, val quantityMilli: Long, val unitPrice: Long, val salePrice: Long? = null)
 
 data class DocumentTotals(
     val lineTotals: List<Long>,
