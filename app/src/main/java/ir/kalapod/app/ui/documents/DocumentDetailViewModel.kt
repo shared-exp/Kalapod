@@ -71,6 +71,8 @@ class DocumentDetailViewModel @Inject constructor(
     fun requestEdit() { pendingEdit.id = id }
 
     private val id: Long = savedState["id"] ?: 0L
+    /** Opened from «ثبت مرجوعی»: show the return form right away (once). */
+    var startReturnOnOpen: Boolean = savedState["startReturn"] ?: false
     private val _state = MutableStateFlow(DetailState())
     val state: StateFlow<DetailState> = _state.asStateFlow()
 

@@ -55,22 +55,42 @@ data class DocumentsState(
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class DocumentsViewModel @Inject constructor(dao: TransactionDao, settings: SettingsRepository) : ViewModel() {
+class DocumentsViewModel @Inject constructor(
+    dao: TransactionDao, settings: SettingsRepository, savedState: androidx.lifecycle.SavedStateHandle,
+) : ViewModel() {
+    /** Picking the invoice a return belongs to: only live sales and purchases, searchable. */
+    val forReturn: Boolean = savedState.get<Boolean>("forReturn") ?: false
     val type = MutableStateFlow<TransactionType?>(null)
+    val query = MutableStateFlow("")
     val state: StateFlow<DocumentsState> = combine(
-        type, type.flatMapLatest { dao.observeDocuments(it, 300) }, settings.settings,
-    ) { t, rows, s -> DocumentsState(t, rows, s.currency) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DocumentsState())
+        type, type.flatMapLatest { dao.observeDocuments(it, 500) }, settings.settings, query,
+    ) { t, rows, s, q ->
+        val shown = rows.filter { r ->
+            (!forReturn || (r.tx.status == ir.kalapod.app.data.local.entity.TransactionStatus.POSTED &&
+                r.tx.type in setOf(TransactionType.SALE, TransactionType.PURCHASE))) &&
+                (q.isBlank() || listOfNotNull(r.invoiceNumber, r.customerName, r.supplierName).any { it.contains(q.trim()) })
+        }
+        DocumentsState(t, shown, s.currency)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DocumentsState())
 }
 
 @Composable
 fun DocumentsScreen(onOpen: (Long) -> Unit, vm: DocumentsViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val q by vm.query.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        Text("فاکتورها و اسناد", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp, 12.dp))
+        Text(
+            if (vm.forReturn) "مرجوعی: فاکتور را انتخاب کنید" else "فاکتورها و اسناد",
+            style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp, 12.dp),
+        )
+        androidx.compose.material3.OutlinedTextField(
+            q, { vm.query.value = it }, singleLine = true, shape = MaterialTheme.shapes.large,
+            placeholder = { Text("شماره فاکتور یا نام مشتری/تأمین‌کننده") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        )
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             item { FilterChip(s.type == null, onClick = { vm.type.value = null }, label = { Text("همه") }) }
-            items(TransactionType.entries) { t ->
+            items(if (vm.forReturn) listOf(TransactionType.SALE, TransactionType.PURCHASE) else TransactionType.entries) { t ->
                 FilterChip(s.type == t, onClick = { vm.type.value = t }, label = { Text(t.label) })
             }
         }

@@ -75,6 +75,13 @@ fun DocumentDetailScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(s.message) { s.message?.let { snackbar.showSnackbar(it); vm.clearMessage() } }
+    LaunchedEffect(s.detail) {
+        val d = s.detail ?: return@LaunchedEffect
+        if (vm.startReturnOnOpen) {
+            vm.startReturnOnOpen = false
+            if (d.canReturn) { vm.startReturn(); showReturn = true }
+        }
+    }
 
     Scaffold(
         topBar = {

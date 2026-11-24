@@ -1,5 +1,6 @@
 package ir.kalapod.app.ui.dashboard
 
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +53,7 @@ fun DashboardScreen(
     onNewPurchase: () -> Unit,
     onOpenInventory: () -> Unit,
     onOpenSuggestions: () -> Unit,
+    onNewReturn: () -> Unit = {},
     onRestoreBackup: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onOpenProduct: (Long) -> Unit = {},
@@ -69,7 +71,7 @@ fun DashboardScreen(
             Column(Modifier.statusBarsPadding()) {
                 if (emptyShop) WelcomeRestoreCard(onRestoreBackup, onClose = viewModel::dismissWelcome)
                 if (backupOff) BackupReminderCard(onOpenBackup, onClose = viewModel::dismissReminder)
-                DashboardContent(state as DashboardUiState.Ready, runningOut, onNewSale, onNewPurchase, onOpenInventory, onOpenSuggestions, onOpenProduct)
+                DashboardContent(state as DashboardUiState.Ready, runningOut, onNewSale, onNewPurchase, onOpenInventory, onOpenSuggestions, onOpenProduct, onNewReturn)
             }
         }
     }
@@ -84,6 +86,7 @@ private fun DashboardContent(
     onOpenInventory: () -> Unit,
     onOpenSuggestions: () -> Unit,
     onOpenProduct: (Long) -> Unit,
+    onNewReturn: () -> Unit,
 ) {
     val cur = s.settings.currency
     val today = s.data.today
@@ -127,6 +130,16 @@ private fun DashboardContent(
                 Spacer(Modifier.size(8.dp))
                 Text("ثبت خرید", style = MaterialTheme.typography.titleMedium)
             }
+        }
+        // Returns start from the invoice they belong to: this opens the list to pick it.
+        androidx.compose.material3.OutlinedButton(
+            onClick = onNewReturn,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+            shape = MaterialTheme.shapes.large,
+        ) {
+            Icon(Icons.AutoMirrored.Outlined.Undo, null, Modifier.size(24.dp))
+            Spacer(Modifier.size(8.dp))
+            Text("ثبت مرجوعی", style = MaterialTheme.typography.titleMedium)
         }
 
         StatCard(

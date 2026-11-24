@@ -23,6 +23,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
@@ -56,6 +57,7 @@ import ir.kalapod.app.ui.cart.SummaryRow
 
 @Composable
 fun SaleScreen(
+    onBack: () -> Unit,
     onCreateProduct: (barcode: String?) -> Unit,
     onDefineNamed: (name: String, quantityMilli: Long) -> Unit,
     onOpenDocument: (Long) -> Unit = {},
@@ -85,7 +87,12 @@ fun SaleScreen(
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-        Text("ثبت فروش", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp, 12.dp))
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.material3.IconButton(onClick = onBack) {
+                Icon(androidx.compose.material.icons.Icons.AutoMirrored.Outlined.ArrowBack, "بازگشت")
+            }
+            Text("ثبت فروش", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(vertical = 12.dp))
+        }
         s.editingNumber?.let { number ->
             androidx.compose.material3.Card(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -123,7 +130,7 @@ fun SaleScreen(
             if (s.lines.isEmpty() && s.editingId == null && recent.isNotEmpty()) {
                 item { Text("فروش‌های اخیر", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp)) }
                 items(recent.size, key = { "sale-" + recent[it].tx.id }) { k ->
-                    SaleHistoryRow(recent[k], cur, onOpen = { onOpenDocument(recent[k].tx.id) }, onEdit = { vm.startEdit(recent[k].tx.id) })
+                    ir.kalapod.app.ui.cart.DocumentHistoryRow(recent[k], cur, onOpen = { onOpenDocument(recent[k].tx.id) }, onEdit = { vm.startEdit(recent[k].tx.id) })
                 }
             }
             if (s.lines.isNotEmpty()) {
@@ -245,41 +252,5 @@ fun SaleScreen(
             confirmButton = { TextButton(onClick = { vm.post(allowOversell = true) }) { Text("با این حال ثبت کن") } },
             dismissButton = { TextButton(onClick = vm::dismissShortages) { Text("انصراف") } },
         )
-    }
-}
-
-@Composable
-private fun SaleHistoryRow(
-    r: ir.kalapod.app.data.local.dao.DocumentRow, cur: ir.kalapod.app.core.format.Currency,
-    onOpen: () -> Unit, onEdit: () -> Unit,
-) {
-    val reversed = r.tx.status == ir.kalapod.app.data.local.entity.TransactionStatus.REVERSED
-    androidx.compose.material3.Card(
-        Modifier.fillMaxWidth().clickable(onClick = onOpen),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-    ) {
-        Row(Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    PersianFormat.money(r.tx.total, cur) + if (reversed) " (باطل‌شده)" else "",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = if (reversed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                    textDecoration = if (reversed) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                )
-                Text(
-                    listOfNotNull(r.customerName, "${PersianFormat.number(r.itemCount.toLong())} قلم").joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    ir.kalapod.app.ui.common.formatDateTime(r.tx.occurredAt) + "  " + PersianFormat.ltr(r.invoiceNumber.orEmpty()),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (!reversed) {
-                androidx.compose.material3.IconButton(onClick = onEdit) {
-                    Icon(androidx.compose.material.icons.Icons.Outlined.Edit, "ویرایش")
-                }
-            }
-        }
     }
 }

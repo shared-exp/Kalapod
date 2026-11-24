@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -137,6 +138,7 @@ fun ProductEditScreen(
                 "هر کارتن/باکس چند ${f.unit.label}؟ (اختیاری)", Modifier.fillMaxWidth(), decimal = true,
             )
 
+            var scanBarcode by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
             Section("بارکدها")
             if (f.barcodes.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -150,10 +152,25 @@ fun ProductEditScreen(
             }
             OutlinedTextField(
                 f.newBarcode, { v -> vm.edit { it.copy(newBarcode = v.filter { c -> !c.isWhitespace() }) } },
-                label = { Text("افزودن بارکد (دستی)") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                label = { Text("افزودن بارکد (دستی یا با دوربین)") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                trailingIcon = { IconButton(onClick = vm::addBarcode) { Icon(Icons.Outlined.Add, "افزودن") } },
+                trailingIcon = {
+                    androidx.compose.foundation.layout.Row {
+                        IconButton(onClick = { scanBarcode = true }) {
+                            Icon(Icons.Outlined.QrCodeScanner, "اسکن بارکد با دوربین")
+                        }
+                        IconButton(onClick = vm::addBarcode) { Icon(Icons.Outlined.Add, "افزودن") }
+                    }
+                },
             )
+            if (scanBarcode) {
+                // Each scanned code is added to this product; scan several, then close.
+                ir.kalapod.app.ui.scanner.BarcodeScannerDialog(
+                    feedback = if (f.barcodes.isEmpty()) "" else "بارکدها: " + f.barcodes.joinToString("، "),
+                    onCode = { code -> vm.edit { it.copy(newBarcode = code) }; vm.addBarcode() },
+                    onClose = { scanBarcode = false },
+                )
+            }
 
             f.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 

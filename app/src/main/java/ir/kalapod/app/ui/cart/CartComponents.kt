@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.Card
@@ -148,11 +149,18 @@ fun ProductPickerSheet(
     onCreateNew: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
+    var scanSearch by remember { mutableStateOf(false) }
+    if (scanSearch) {
+        ir.kalapod.app.ui.scanner.BarcodeScannerDialog(feedback = "", onCode = { onQuery(it); scanSearch = false }, onClose = { scanSearch = false })
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 16.dp)) {
             OutlinedTextField(
                 query, onQuery, placeholder = { Text("نام کالا یا بارکد") },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) }, singleLine = true,
+                trailingIcon = {
+                    IconButton(onClick = { scanSearch = true }) { Icon(Icons.Outlined.QrCodeScanner, "اسکن بارکد با دوربین") }
+                },
                 modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
             )
             if (onCreateNew != null) {
@@ -251,4 +259,41 @@ fun UnknownBarcodeDialog(code: String, onDefine: () -> Unit, onDismiss: () -> Un
         confirmButton = { androidx.compose.material3.TextButton(onClick = onDefine) { Text("تعریف کالا") } },
         dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("بعداً") } },
     )
+}
+
+/** One past invoice in a history list (sale or purchase screen): tap to open, pencil to edit. */
+@Composable
+fun DocumentHistoryRow(
+    r: ir.kalapod.app.data.local.dao.DocumentRow, cur: ir.kalapod.app.core.format.Currency,
+    onOpen: () -> Unit, onEdit: (() -> Unit)? = null,
+) {
+    val reversed = r.tx.status == ir.kalapod.app.data.local.entity.TransactionStatus.REVERSED
+    androidx.compose.material3.Card(
+        androidx.compose.ui.Modifier.fillMaxWidth().clickable(onClick = onOpen),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+    ) {
+        Row(androidx.compose.ui.Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f)) {
+                Text(
+                    PersianFormat.money(r.tx.total, cur) + if (reversed) " (باطل‌شده)" else "",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (reversed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    textDecoration = if (reversed) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                )
+                Text(
+                    listOfNotNull(r.customerName, "${PersianFormat.number(r.itemCount.toLong())} قلم").joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    ir.kalapod.app.ui.common.formatDateTime(r.tx.occurredAt) + "  " + ir.kalapod.app.core.format.PersianFormat.ltr(r.invoiceNumber.orEmpty()),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (!reversed && onEdit != null) {
+                androidx.compose.material3.IconButton(onClick = onEdit) {
+                    Icon(androidx.compose.material.icons.Icons.Outlined.Edit, "ویرایش")
+                }
+            }
+        }
+    }
 }

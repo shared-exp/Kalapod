@@ -58,6 +58,7 @@ fun PurchaseScreen(
     onBack: () -> Unit,
     onCreateProduct: (barcode: String?) -> Unit,
     onDefineNamed: (name: String, quantityMilli: Long) -> Unit,
+    onOpenDocument: (Long) -> Unit = {},
     vm: PurchaseViewModel = hiltViewModel(),
     voiceVm: VoiceViewModel = hiltViewModel(),
 ) {
@@ -73,6 +74,7 @@ fun PurchaseScreen(
     val snackbar = remember { SnackbarHostState() }
     val cur = s.currency
     val totals = vm.totals(s)
+    val recentPurchases by vm.recentPurchases.collectAsStateWithLifecycle()
 
     LaunchedEffect(s.lastPosted) {
         s.lastPosted?.let {
@@ -93,7 +95,7 @@ fun PurchaseScreen(
             contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            itemsIndexed(s.lines, key = { _, l -> l.productId }) { i, line ->
+            itemsIndexed(s.lines, key = { _, l -> "${l.productId}-${l.caseSizeMilli}" }) { i, line ->
                 CartLineCard(line, cur, onChange = { vm.updateLine(i, it) }, onRemove = { vm.removeLine(i) }, showSalePrice = true)
             }
             item {
@@ -103,6 +105,14 @@ fun PurchaseScreen(
                     onScan = { vm.scanFeedback.value = ""; showScanner = true },
                     onVoice = { voiceVm.begin(forPurchase = true) },
                 )
+            }
+            // Purchase history: every purchase, newest first; tap to open (return, cancel, PDF).
+            val recent = recentPurchases
+            if (s.lines.isEmpty() && recent.isNotEmpty()) {
+                item { Text("خریدهای اخیر", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp)) }
+                items(recent.size, key = { "buy-" + recent[it].tx.id }) { k ->
+                    ir.kalapod.app.ui.cart.DocumentHistoryRow(recent[k], cur, onOpen = { onOpenDocument(recent[k].tx.id) })
+                }
             }
             if (s.lines.isNotEmpty()) {
                 item {

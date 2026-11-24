@@ -192,7 +192,7 @@ private fun ReviewContent(
     val returnOnWrongScreen = p.command.operation == VoiceOperation.RETURN && expected != VoiceOperation.RETURN
     if (returnOnWrongScreen) {
         Text(
-            "برای مرجوعی، از تب «فاکتورها» فاکتور مربوط را باز کنید و «ثبت مرجوعی» را بزنید؛ آنجا هم می‌توانید با صدا بگویید.",
+            "برای مرجوعی، در صفحه اصلی «ثبت مرجوعی» را بزنید و فاکتور مربوط را انتخاب کنید؛ آنجا هم می‌توانید با صدا بگویید.",
             color = MaterialTheme.colorScheme.error,
         )
     } else if (expected != null && p.command.operation != null && p.command.operation != expected) {

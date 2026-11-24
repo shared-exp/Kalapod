@@ -48,10 +48,11 @@ import androidx.navigation.navArgument
 
 /** Purchase screen («ورود کالا»): opened from Inventory, the dashboard and order suggestions. */
 const val PURCHASE_ROUTE = "purchase"
+/** Sale screen: opened from the dashboard's big «ثبت فروش» button (not a tab). */
+const val SALE_ROUTE = "sale"
 
 enum class TopLevel(val route: String, val label: String, val icon: ImageVector) {
     HOME("home", "خانه", Icons.Outlined.Home),
-    SALE("sale", "فروش", Icons.Outlined.PointOfSale),
     INVENTORY("inventory", "انبار", Icons.Outlined.Inventory2),
     REPORTS("more", "بیشتر", Icons.Outlined.MoreHoriz),
 }
@@ -96,7 +97,8 @@ fun KalapodNavHost() {
         ) {
             composable(TopLevel.HOME.route) {
                 DashboardScreen(
-                    onNewSale = { go(TopLevel.SALE.route) },
+                    onNewSale = { nav.navigate(SALE_ROUTE) { launchSingleTop = true } },
+                    onNewReturn = { nav.navigate("documents?forReturn=true") },
                     onNewPurchase = { nav.navigate(PURCHASE_ROUTE) },
                     onOpenInventory = { go(TopLevel.INVENTORY.route) },
                     onOpenSuggestions = { nav.navigate("suggestions") },
@@ -111,8 +113,10 @@ fun KalapodNavHost() {
                     onBack = { nav.popBackStack() },
                     onCreateProduct = { code -> nav.navigate("product/edit?from=purchase" + (code?.let { "&barcode=$it" } ?: "")) },
                     onDefineNamed = { name, qty -> nav.navigate("product/edit?from=purchase&qty=$qty&name=" + android.net.Uri.encode(name)) },
+                    onOpenDocument = { nav.navigate("document/$it") },
                 ) }
-            composable(TopLevel.SALE.route) { SaleScreen(
+            composable(SALE_ROUTE) { SaleScreen(
+                    onBack = { nav.popBackStack() },
                     onCreateProduct = { code -> nav.navigate("product/edit?from=sale" + (code?.let { "&barcode=$it" } ?: "")) },
                     onDefineNamed = { name, _ -> nav.navigate("product/edit?from=sale&name=" + android.net.Uri.encode(name)) },
                     onOpenDocument = { nav.navigate("document/$it") },
@@ -151,7 +155,13 @@ fun KalapodNavHost() {
                     ),
                 )
             }
-            composable("documents") { DocumentsScreen(onOpen = { nav.navigate("document/$it") }) }
+            composable(
+                "documents?forReturn={forReturn}",
+                arguments = listOf(navArgument("forReturn") { type = NavType.BoolType; defaultValue = false }),
+            ) { entry ->
+                val forReturn = entry.arguments?.getBoolean("forReturn") == true
+                DocumentsScreen(onOpen = { nav.navigate("document/$it?startReturn=$forReturn") })
+            }
             composable("parties") {
                 PartiesScreen(
                     onBack = { nav.popBackStack() },
@@ -172,10 +182,16 @@ fun KalapodNavHost() {
                 arguments = listOf(navArgument("restore") { type = NavType.BoolType; defaultValue = false }),
             ) { entry -> BackupScreen(onBack = { nav.popBackStack() }, startRestore = entry.arguments?.getBoolean("restore") == true) }
             composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
-            composable("document/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) {
+            composable(
+                "document/{id}?startReturn={startReturn}",
+                arguments = listOf(
+                    navArgument("id") { type = NavType.LongType },
+                    navArgument("startReturn") { type = NavType.BoolType; defaultValue = false },
+                ),
+            ) {
                 DocumentDetailScreen(
                     onBack = { nav.popBackStack() }, onOpen = { nav.navigate("document/$it") },
-                    onEditSale = { go(TopLevel.SALE.route) },
+                    onEditSale = { nav.navigate(SALE_ROUTE) { launchSingleTop = true } },
                 )
             }
         }

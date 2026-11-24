@@ -58,7 +58,13 @@ class PurchaseViewModel @Inject constructor(
     private val pending: ir.kalapod.app.ui.forecast.PendingPurchase,
     parties: PartyDao,
     settings: SettingsRepository,
+    transactionDao: ir.kalapod.app.data.local.dao.TransactionDao,
 ) : ViewModel() {
+    /** Purchase history shown under the purchase screen (newest first). */
+    val recentPurchases: StateFlow<List<ir.kalapod.app.data.local.dao.DocumentRow>> =
+        transactionDao.observeDocuments(ir.kalapod.app.data.local.entity.TransactionType.PURCHASE, 200)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _state = MutableStateFlow(PurchaseState())
     val state: StateFlow<PurchaseState> = _state.asStateFlow()
 
