@@ -2,6 +2,7 @@ package ir.kalapod.app.domain.voice
 
 import ir.kalapod.app.data.local.entity.ProductUnit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Several items said back to back, with or without «و», units, sizes and prices. */
@@ -85,5 +86,32 @@ class ConsecutiveItemsTest {
     @Test fun internalSizeMarkersAreNeverShown() {
         val item = VoiceCommandParser.parse("۱۰ تا رب ۷۰۰ چین چین").items.single()
         assertEquals("رب 700 چین چین", item.shownName)
+    }
+
+    // ---- reported 2: «یه روغن یه ربع یه پنیر صبا» with general names → three separate lines
+
+    private val shop = listOf(
+        p(10, "روغن طبیعت ۸۱۰ گرمی"), p(11, "روغن لادن ۱.۵ لیتری"),
+        p(12, "رب گوجه فرنگی چین چین ۷۰۰ گرمی"), p(13, "رب گوجه فرنگی تبرک ۸۰۰ گرمی"),
+        p(14, "پنیر صبا"), p(15, "پسته اکبری"),
+    )
+    private fun shopLines(s: String) = VoiceResolver.resolve(VoiceCommandParser.parse(s), shop, forPurchase = false)
+
+    @Test fun generalNamesEachGetTheirOwnLineAndQuestion() {
+        val l = shopLines("یه روغن یه ربع یه پنیر صبا")
+        assertEquals(3, l.size)
+        assertEquals(setOf(10L, 11L), l[0].options.map { it.id }.toSet())   // which oil?
+        assertEquals(setOf(12L, 13L), l[1].options.map { it.id }.toSet())   // «ربع» heard for «رب»: which paste?
+        assertEquals(14L, l[2].product?.id)
+        assertEquals(listOf(1_000L, 1_000L, 1_000L), l.map { it.quantityMilli })
+        l.forEach { assertTrue(!it.heard.shownName.contains("#")) }
+    }
+
+    @Test fun quarterKiloIsAQuantity() {
+        val l = VoiceCommandParser.parse("یه ربع کیلو پسته").items.single()
+        assertEquals("پسته", l.name); assertEquals(250L, l.quantityMilli)
+        assertEquals(750L, VoiceCommandParser.parse("سه ربع کیلو پسته").items.single().quantityMilli)
+        val two = VoiceCommandParser.parse("دو کیلو پسته یه ربع کیلو پنیر").items
+        assertEquals(listOf(2_000L, 250L), two.map { it.quantityMilli })
     }
 }

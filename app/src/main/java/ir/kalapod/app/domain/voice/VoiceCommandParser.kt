@@ -157,6 +157,16 @@ object VoiceCommandParser {
             when {
                 w == PersianText.COMMA -> { i++; if (cur.name.isNotEmpty() && cur.qty != null) flush() }
 
+                // «ربع کیلو» = 250 g, «سه ربع کیلو» = 750 g. Without a unit after it, «ربع» is a name word
+                // (speech recognition often hears «رب» as «ربع»; the matcher reads it as «رب»).
+                w == "ربع" && t.getOrNull(i + 1) in unitWords -> {
+                    val whole = if (cur.name.isEmpty()) cur.qty else null
+                    if (whole == null && cur.qty != null && cur.name.isNotEmpty()) flush()
+                    cur.qty = (whole ?: 1_000L) / 4
+                    cur.unit = unitWords[t[i + 1]]
+                    i += 2
+                }
+
                 // "و" before a number starts a new item: "سه تا روغن و دو بسته ماکارونی"
                 w == "و" -> {
                     if (i + 1 < t.size && SpokenNumbers.isNumberWord(t[i + 1]) && cur.name.isNotEmpty()) flush()
