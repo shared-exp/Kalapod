@@ -96,7 +96,7 @@ class PurchaseViewModel @Inject constructor(
         val s = _state.value
         if (s.lines.isEmpty()) return "هیچ کالایی اضافه نشده است."
         s.lines.forEach { l ->
-            if (l.quantityMilli() == null) return "مقدار «${l.name}» را درست وارد کنید."
+            if (l.quantityMilli() == null) return "مقدار «${l.name}» را وارد کنید؛ کالا با مقدار صفر خریده نمی‌شود."
             if (l.unitPrice(s.currency) == null) return "قیمت «${l.name}» را وارد کنید."
         }
         if (parseOptional(s.discountText, s.currency) == null) return "تخفیف نامعتبر است."

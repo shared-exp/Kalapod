@@ -212,7 +212,7 @@ fun SaleScreen(
                     s.shortages.forEach {
                         Text("${it.name}: درخواست ${PersianFormat.quantity(it.requestedMilli)}، موجودی ${PersianFormat.quantity(it.availableMilli)}")
                     }
-                    Text("اگر کالا واقعاً در فروشگاه هست، می‌توانید فروش را ثبت کنید؛ موجودی منفی می‌شود تا بعداً اصلاح شود.")
+                    Text("اگر کالا واقعاً در فروشگاه هست (مثلاً خریدش اشتباه یا ناقص ثبت شده)، فروش را ثبت کنید. موجودی منفی می‌شود و در صفحه اصلی برای اصلاح نشان داده می‌شود؛ با ثبت خرید یا شمارش انبار درست می‌شود.")
                 }
             },
             confirmButton = { TextButton(onClick = { vm.post(allowOversell = true) }) { Text("با این حال ثبت کن") } },

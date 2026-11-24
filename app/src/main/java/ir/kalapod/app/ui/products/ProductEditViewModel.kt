@@ -34,6 +34,8 @@ data class ProductForm(
     val minStock: String = "",
     val leadTimeDays: String = "1",
     val openingStock: String = "",
+    /** How a new product's stock is entered here (depends on where the form was opened). */
+    val stockRule: StockRule = StockRule.REQUIRED,
     val barcodes: List<String> = emptyList(),
     val newBarcode: String = "",
     val isArchived: Boolean = false,
@@ -72,6 +74,11 @@ class ProductEditViewModel @Inject constructor(
     private val productId: Long = savedState.get<Long>("id") ?: 0L
     private val initialBarcode: String? = savedState.get<String>("barcode")?.takeIf { it.isNotBlank() }
     private val initialName: String = savedState.get<String>("name").orEmpty()
+    private val stockRule = when (savedState.get<String>("from")) {
+        "purchase" -> StockRule.FROM_PURCHASE
+        "sale" -> StockRule.OPTIONAL
+        else -> StockRule.REQUIRED
+    }
 
     private val _form = MutableStateFlow(ProductForm())
     val form: StateFlow<ProductForm> = _form.asStateFlow()
@@ -84,7 +91,7 @@ class ProductEditViewModel @Inject constructor(
             val cur = settings.settings.first().currency
             val p = if (productId != 0L) repo.get(productId) else null
             _form.value = if (p == null) {
-                ProductForm(loaded = true, currency = cur, barcodes = listOfNotNull(initialBarcode), name = initialName)
+                ProductForm(loaded = true, currency = cur, barcodes = listOfNotNull(initialBarcode), name = initialName, stockRule = stockRule)
             } else {
                 ProductForm(
                     loaded = true, isNew = false, name = p.name, categoryId = p.categoryId, unit = p.unit,
@@ -126,6 +133,9 @@ class ProductEditViewModel @Inject constructor(
             ?: return fail("زمان تأمین نامعتبر است.")
         val opening = if (f.openingStock.isBlank()) 0L else InputParser.quantity(f.openingStock)
             ?: return fail("موجودی اولیه نامعتبر است.")
+        if (f.isNew && f.stockRule == StockRule.REQUIRED && opening <= 0L) {
+            return fail("موجودی فعلی را وارد کنید؛ کالا با موجودی صفر ثبت نمی‌شود.")
+        }
         if (opening > 0 && buy == 0L) return fail("برای ثبت موجودی اولیه، قیمت خرید را وارد کنید.")
         val codes = (f.barcodes + f.newBarcode).map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -135,7 +145,7 @@ class ProductEditViewModel @Inject constructor(
                 ProductDraft(
                     id = productId, name = f.name, categoryId = f.categoryId, unit = f.unit,
                     salePrice = sale, purchasePrice = buy, minStockMilli = min, leadTimeDays = lead.coerceAtLeast(0),
-                    barcodes = codes, openingStockMilli = if (f.isNew) opening else 0,
+                    barcodes = codes, openingStockMilli = if (f.isNew && f.stockRule != StockRule.FROM_PURCHASE) opening else 0,
                 ),
             )
             _form.update {
@@ -172,3 +182,10 @@ class ProductEditViewModel @Inject constructor(
 
     private fun fail(msg: String) = _form.update { it.copy(error = msg) }
 }
+
+/**
+ * New product's stock: REQUIRED from the inventory screen (no product with zero stock), FROM_PURCHASE
+ * when defined while buying (the purchase line brings the stock), OPTIONAL while selling (the sale may go
+ * negative and the purchase/count is fixed later).
+ */
+enum class StockRule { REQUIRED, FROM_PURCHASE, OPTIONAL }

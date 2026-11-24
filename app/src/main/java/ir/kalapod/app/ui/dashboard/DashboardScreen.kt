@@ -1,5 +1,6 @@
 package ir.kalapod.app.ui.dashboard
 
+import androidx.compose.foundation.clickable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,6 +54,7 @@ fun DashboardScreen(
     onOpenSuggestions: () -> Unit,
     onRestoreBackup: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
+    onOpenProduct: (Long) -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -67,7 +69,7 @@ fun DashboardScreen(
             Column(Modifier.statusBarsPadding()) {
                 if (emptyShop) WelcomeRestoreCard(onRestoreBackup, onClose = viewModel::dismissWelcome)
                 if (backupOff) BackupReminderCard(onOpenBackup, onClose = viewModel::dismissReminder)
-                DashboardContent(state as DashboardUiState.Ready, runningOut, onNewSale, onNewPurchase, onOpenInventory, onOpenSuggestions)
+                DashboardContent(state as DashboardUiState.Ready, runningOut, onNewSale, onNewPurchase, onOpenInventory, onOpenSuggestions, onOpenProduct)
             }
         }
     }
@@ -81,6 +83,7 @@ private fun DashboardContent(
     onNewPurchase: () -> Unit,
     onOpenInventory: () -> Unit,
     onOpenSuggestions: () -> Unit,
+    onOpenProduct: (Long) -> Unit,
 ) {
     val cur = s.settings.currency
     val today = s.data.today
@@ -144,7 +147,7 @@ private fun DashboardContent(
         }
         StatCard("ارزش موجودی انبار", PersianFormat.money(s.data.stockValue, cur), "بر پایه بهای تمام‌شده")
 
-        AlertsCard(s, runningOut, onOpenInventory, onOpenSuggestions)
+        AlertsCard(s, runningOut, onOpenInventory, onOpenSuggestions, onOpenProduct)
     }
 }
 
@@ -187,6 +190,7 @@ private fun AlertsCard(
     runningOut: List<ir.kalapod.app.domain.forecast.ProductForecast>,
     onOpenInventory: () -> Unit,
     onOpenSuggestions: () -> Unit,
+    onOpenProduct: (Long) -> Unit,
 ) {
     val low = s.data.lowStock
     val lowIds = low.map { it.id }.toSet()
@@ -223,10 +227,16 @@ private fun AlertsCard(
                 Text("کالای رو به اتمام ندارید.", style = MaterialTheme.typography.bodyMedium)
             } else if (low.isNotEmpty()) {
                 low.take(5).forEach { p ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    val negative = p.stockMilli < 0
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onOpenProduct(p.id) }.padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
                         Text(p.name, style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "موجودی: ${PersianFormat.quantity(p.stockMilli)}",
+                            // Sold more than was recorded: a purchase or count is missing — fix it from the product.
+                            if (negative) "موجودی منفی (${PersianFormat.quantity(p.stockMilli)}) — اصلاح کنید"
+                            else "موجودی: ${PersianFormat.quantity(p.stockMilli)}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (p.stockMilli <= 0) MaterialTheme.colorScheme.error
                             else MaterialTheme.colorScheme.onSurfaceVariant,

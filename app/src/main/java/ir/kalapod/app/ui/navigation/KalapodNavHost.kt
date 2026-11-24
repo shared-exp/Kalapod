@@ -100,16 +100,17 @@ fun KalapodNavHost() {
                     onOpenSuggestions = { nav.navigate("suggestions") },
                     onRestoreBackup = { nav.navigate("backup?restore=true") },
                     onOpenBackup = { nav.navigate("backup") },
+                    onOpenProduct = { id -> nav.navigate("product/edit?id=$id") },
                 )
             }
             // Screens below are implemented in roadmap steps 1.6–1.8 and 3.3.
             composable(TopLevel.PURCHASE.route) { PurchaseScreen(
-                    onCreateProduct = { code -> nav.navigate(if (code == null) "product/edit" else "product/edit?barcode=$code") },
-                    onDefineNamed = { name -> nav.navigate("product/edit?name=" + android.net.Uri.encode(name)) },
+                    onCreateProduct = { code -> nav.navigate("product/edit?from=purchase" + (code?.let { "&barcode=$it" } ?: "")) },
+                    onDefineNamed = { name -> nav.navigate("product/edit?from=purchase&name=" + android.net.Uri.encode(name)) },
                 ) }
             composable(TopLevel.SALE.route) { SaleScreen(
-                    onCreateProduct = { code -> nav.navigate(if (code == null) "product/edit" else "product/edit?barcode=$code") },
-                    onDefineNamed = { name -> nav.navigate("product/edit?name=" + android.net.Uri.encode(name)) },
+                    onCreateProduct = { code -> nav.navigate("product/edit?from=sale" + (code?.let { "&barcode=$it" } ?: "")) },
+                    onDefineNamed = { name -> nav.navigate("product/edit?from=sale&name=" + android.net.Uri.encode(name)) },
                 ) }
             composable(TopLevel.INVENTORY.route) {
                 ProductListScreen(
@@ -118,11 +119,12 @@ fun KalapodNavHost() {
                 )
             }
             composable(
-                "product/edit?id={id}&barcode={barcode}&name={name}",
+                "product/edit?id={id}&barcode={barcode}&name={name}&from={from}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("barcode") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("name") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("from") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) {
                 ProductEditScreen(
