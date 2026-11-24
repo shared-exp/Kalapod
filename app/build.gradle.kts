@@ -1,5 +1,10 @@
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Properties
+
+/** Single version number for the app, kept in version.properties (bumped for every delivered APK). */
+val appVersion: Int = Properties().apply { rootProject.file("version.properties").inputStream().use { load(it) } }
+    .getProperty("VERSION").toInt()
 
 plugins {
     alias(libs.plugins.android.application)
@@ -17,8 +22,8 @@ android {
         applicationId = "ir.kalapod.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersion
+        versionName = "0.$appVersion"
         // Build stamp shown in Settings, so the shop can tell which APK is installed.
         buildConfigField("String", "BUILD_STAMP", "\"" + SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date()) + "\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
