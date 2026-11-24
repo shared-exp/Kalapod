@@ -101,7 +101,7 @@ listOf("debug", "release").forEach { type ->
     val cap = type.replaceFirstChar { it.uppercase() }
     val copy = tasks.register("copy${cap}ApkToRoot") {
         val apkDir = layout.buildDirectory.dir("outputs/apk/$type")
-        val target = rootProject.layout.projectDirectory.file("Kalapod-$type.apk").asFile
+        val target = rootProject.layout.projectDirectory.file("Kalapod-v0.$appVersion-$type.apk").asFile
         doLast {
             val apk = apkDir.get().asFile.listFiles { f -> f.extension == "apk" }?.maxByOrNull { it.lastModified() }
             if (apk != null) {
