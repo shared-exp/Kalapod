@@ -1,0 +1,38 @@
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "version.properties", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fill in links and version
+        run: |
+          VERSION="0.$(grep '^VERSION=' version.properties | cut -d= -f2 | tr -d '\r')"
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+          APK_URL="${REPO_URL}/releases/latest/download/Kalapod.apk"
+          FA_VERSION=$(echo "$VERSION" | sed 'y/0123456789./۰۱۲۳۴۵۶۷۸۹٫/')
+          sed -i -e "s|__REPO_URL__|${REPO_URL}|g" -e "s|__APK_URL__|${APK_URL}|g" -e "s|__VERSION__|${FA_VERSION}|g" site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
