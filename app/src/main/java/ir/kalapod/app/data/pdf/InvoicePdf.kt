@@ -33,7 +33,11 @@ data class InvoiceData(
     val reversed: Boolean,
     val currency: Currency,
 ) {
-    data class Line(val name: String, val quantityMilli: Long, val unitLabel: String, val unitPrice: Long, val lineTotal: Long)
+    /** [caseSizeMilli]: bought by the carton — quantity shown in cartons, price per carton. */
+    data class Line(
+        val name: String, val quantityMilli: Long, val unitLabel: String, val unitPrice: Long, val lineTotal: Long,
+        val caseSizeMilli: Long? = null,
+    )
 }
 
 /**
@@ -96,8 +100,8 @@ object InvoicePdf {
             val cells = listOf(
                 PersianFormat.number((i + 1).toLong()),
                 l.name,
-                PersianFormat.quantity(l.quantityMilli) + " " + l.unitLabel,
-                money(l.unitPrice),
+                PersianFormat.withCases(l.quantityMilli, l.unitLabel, l.caseSizeMilli),
+                money(perCase(l) ?: l.unitPrice),
                 money(l.lineTotal),
             )
             cells.forEachIndexed { k, s -> draw(c!!, s, text, colRight[k] - 4f, y + 7f, cols[k] - 8f, maxLines = 1) }
@@ -145,4 +149,11 @@ object InvoicePdf {
         layout.draw(c)
         c.restore()
     }
+}
+
+/** Price of one carton for a line bought by the carton (exact from the line total). */
+internal fun perCase(l: InvoiceData.Line): Long? {
+    val size = l.caseSizeMilli ?: return null
+    if (l.quantityMilli <= 0) return null
+    return ir.kalapod.app.domain.finance.Money.divRoundHalfUp(l.lineTotal * size, l.quantityMilli)
 }

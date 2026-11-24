@@ -86,6 +86,7 @@ class VoiceViewModel @Inject constructor(
     /** Starts an item session. [forPurchase] chooses which default prices fill unspecified prices. */
     fun begin(forPurchase: Boolean) {
         this.forPurchase = forPurchase
+        definedNames.clear()
         rawMode = false
         start()
     }
@@ -144,7 +145,7 @@ class VoiceViewModel @Inject constructor(
         viewModelScope.launch {
             val cmd = VoiceCommandParser.parse(text)
             val catalog = products.observeActive().first().map {
-                CatalogProduct(it.id, it.name, it.unit, it.salePrice, it.lastPurchasePrice, it.stockMilli)
+                CatalogProduct(it.id, it.name, it.unit, it.salePrice, it.lastPurchasePrice, it.stockMilli, it.caseSizeMilli)
             }
             val learned = aliases.all().associate { it.alias to it.productId }
             val sold = salesCounts()
@@ -152,7 +153,11 @@ class VoiceViewModel @Inject constructor(
             val lines = VoiceResolver.resolve(cmd, catalog, forPurchase, learned).map { l ->
                 if (l.options.size < 2) l else l.copy(options = l.options.sortedByDescending { sold[it.id] ?: 0L })
             }
-            if (lines.isEmpty()) {
+                // Purchases: items defined in the product form went into the cart from the form itself.
+                .filterNot { forPurchase && it.heard.shownName in definedNames }
+            if (lines.isEmpty() && definedNames.isNotEmpty()) {
+                _phase.value = VoicePhase.Idle
+            } else if (lines.isEmpty()) {
                 _phase.value = VoicePhase.Error("کالایی در جمله پیدا نشد: «$text»")
             } else {
                 _phase.value = VoicePhase.Review(text, cmd, lines)
@@ -175,6 +180,13 @@ class VoiceViewModel @Inject constructor(
         if (heard.isNotBlank() && !line.generic) viewModelScope.launch {
             aliases.put(ir.kalapod.app.data.local.entity.ProductAliasEntity(alias = heard, productId = p.id, createdAt = System.currentTimeMillis()))
         }
+    }
+
+    /** «هر کارتن چند تا؟» answered for a line said in cartons. */
+    fun setCaseSize(index: Int, caseSizeMilli: Long) {
+        val r = _phase.value as? VoicePhase.Review ?: return
+        if (caseSizeMilli <= 0) return
+        _phase.value = r.copy(lines = r.lines.toMutableList().also { it[index] = VoiceResolver.withCaseSize(it[index], caseSizeMilli, forPurchase) })
     }
 
     /** Listens for the type of the first line that still needs one (tapping an option always works too). */
@@ -233,6 +245,21 @@ class VoiceViewModel @Inject constructor(
     }
 
     /** After the user defines an unknown product, re-resolve so it gets matched. */
+    /** Names the user sent to the product form from this review; the form puts them in the cart itself. */
+    private val definedNames = mutableSetOf<String>()
+
+    /** Quantity heard for [name] (pieces; cartons × size when known), to prefill the new product's form. */
+    fun definingPieces(name: String): Long {
+        val r = _phase.value as? VoicePhase.Review ?: return 0
+        definedNames += name
+        val l = r.lines.firstOrNull { it.heard.shownName == name } ?: return 0
+        val cases = l.heard.quantityMilli
+        val size = l.heard.caseSizeMilli
+        return if (l.heard.unit == ir.kalapod.app.data.local.entity.ProductUnit.CARTON && cases != null && size != null) {
+            ir.kalapod.app.domain.finance.Money.divRoundHalfUp(cases * size, ir.kalapod.app.domain.finance.Money.MILLI)
+        } else l.heard.quantityMilli ?: 0
+    }
+
     fun refreshAfterDefine() {
         val r = _phase.value as? VoicePhase.Review ?: return
         process(r.heard)

@@ -20,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
@@ -54,8 +55,9 @@ import ir.kalapod.app.ui.cart.SummaryRow
 
 @Composable
 fun PurchaseScreen(
+    onBack: () -> Unit,
     onCreateProduct: (barcode: String?) -> Unit,
-    onDefineNamed: (name: String) -> Unit,
+    onDefineNamed: (name: String, quantityMilli: Long) -> Unit,
     vm: PurchaseViewModel = hiltViewModel(),
     voiceVm: VoiceViewModel = hiltViewModel(),
 ) {
@@ -80,7 +82,12 @@ fun PurchaseScreen(
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-        Text("ثبت خرید", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp, 12.dp))
+        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.material3.IconButton(onClick = onBack) {
+                Icon(androidx.compose.material.icons.Icons.AutoMirrored.Outlined.ArrowBack, "بازگشت")
+            }
+            Text("ورود کالا (خرید)", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(vertical = 12.dp))
+        }
         LazyColumn(
             Modifier.weight(1f),
             contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 16.dp),
@@ -153,7 +160,7 @@ fun PurchaseScreen(
     VoiceSheet(
         voiceVm, VoiceOperation.PURCHASE, cur,
         onApply = vm::applyVoice,
-        onDefine = { name -> voiceVm.awaitingDefine = true; onDefineNamed(name) },
+        onDefine = { name -> voiceVm.awaitingDefine = true; onDefineNamed(name, voiceVm.definingPieces(name)) },
     )
 
     if (showScanner) {

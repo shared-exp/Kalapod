@@ -14,6 +14,8 @@ data class ParsedItem(
     /** Unit the price refers to ("کیلویی" → KILOGRAM) when it differs from [unit]. */
     val priceUnit: ProductUnit?,
     val totalPrice: Long?,
+    /** «کارتن ۱۲ تایی»: pieces per carton (milli), when said. */
+    val caseSizeMilli: Long? = null,
 ) {
     /** The name as the user should see it: internal size tokens («#700») shown as plain numbers. */
     val shownName: String get() = PackSize.readable(name)
@@ -44,7 +46,8 @@ object VoiceCommandParser {
         "تا" to ProductUnit.PIECE, "عدد" to ProductUnit.PIECE, "دونه" to ProductUnit.PIECE, "دانه" to ProductUnit.PIECE,
         "شیشه" to ProductUnit.PIECE, "قوطی" to ProductUnit.PIECE, "بطری" to ProductUnit.PIECE, "کیسه" to ProductUnit.PIECE,
         "بسته" to ProductUnit.PACK, "پاکت" to ProductUnit.PACK,
-        "کارتن" to ProductUnit.CARTON, "جعبه" to ProductUnit.CARTON, "شل" to ProductUnit.CARTON,
+        "کارتن" to ProductUnit.CARTON, "کارتون" to ProductUnit.CARTON, "جعبه" to ProductUnit.CARTON, "شل" to ProductUnit.CARTON,
+        "باکس" to ProductUnit.CARTON, "بکس" to ProductUnit.CARTON, "بوکس" to ProductUnit.CARTON,
         "لیتر" to ProductUnit.LITER, "متر" to ProductUnit.METER,
     ).filterValues { it != null }.mapValues { it.value!! }
 
@@ -52,9 +55,14 @@ object VoiceCommandParser {
     private val pricePerWords = mapOf(
         "کیلویی" to ProductUnit.KILOGRAM, "کیلوئی" to ProductUnit.KILOGRAM, "گرمی" to ProductUnit.GRAM,
         "عددی" to ProductUnit.PIECE, "تایی" to ProductUnit.PIECE, "دونهای" to ProductUnit.PIECE, "دانهای" to ProductUnit.PIECE,
-        "بستهای" to ProductUnit.PACK, "کارتنی" to ProductUnit.CARTON, "لیتری" to ProductUnit.LITER, "متری" to ProductUnit.METER,
+        "بستهای" to ProductUnit.PACK, "کارتنی" to ProductUnit.CARTON, "باکسی" to ProductUnit.CARTON,
+        "بکسی" to ProductUnit.CARTON, "جعبهای" to ProductUnit.CARTON, "لیتری" to ProductUnit.LITER, "متری" to ProductUnit.METER,
         "دونهای" to ProductUnit.PIECE,
     )
+    /** Words for a carton/box (a pack of pieces): «۱۰ تا کارتن», «ده باکس». */
+    private val caseWords get() = unitWords.filterValues { it == ProductUnit.CARTON }.keys
+    /** After a number, the carton's content: «۱۲ تایی», «۲۴ عددی», «۶ دونه‌ای». (Before a number they mean "per piece".) */
+    private val perCountWords = setOf("تایی", "عددی", "دونهای", "دانهای")
     private val priceMarkers = setOf("فی", "قیمت", "قیمتش", "هرکدوم", "هرکدام", "هرکدومش")
     private val totalMarkers = setOf("جمعا", "کلا", "مجموعا", "جمعاً", "کلاً", "مجموعاً", "همش", "همهاش", "رویهم", "رویهم")
     private val currencyWords = mapOf("تومان" to false, "تومن" to false, "تومنی" to false, "ریال" to true, "ریالی" to true)
@@ -80,6 +88,7 @@ object VoiceCommandParser {
     private fun joinSuffixes(text: String): String =
         PersianText.normalize(text).replace(Regex("(\\S+) ای(?=\\s|$)"), "$1ای").replace(Regex("(\\S+) اش(?=\\s|$)"), "$1اش")
             // «دوتا», «سه‌تا», «۲تا» written as one word → «دو تا»
+            .replace(Regex("""(\d+)(تایی|عددی)(?=\s|$)"""), "$1 $2")
             .replace(Regex("""(?<=^|\s)(یه|یک|دو|سه|چهار|چار|پنج|شش|شیش|هفت|هشت|نه|ده|\d+)‌?تا(?=\s|$)"""), "$1 تا")
 
     // ---------------- operation / payment ----------------
@@ -136,11 +145,12 @@ object VoiceCommandParser {
         var unitPrice: Long? = null
         var priceUnit: ProductUnit? = null
         var total: Long? = null
+        var caseSize: Long? = null
         val isEmpty get() = name.isEmpty() && qty == null && unitPrice == null && total == null
         fun build() = ParsedItem(
             name = name.filterNot { it in fillers }.joinToString(" ").trim(),
             quantityMilli = qty, unit = unit, unitPrice = unitPrice,
-            priceUnit = priceUnit?.takeIf { it != unit }, totalPrice = total,
+            priceUnit = priceUnit?.takeIf { it != unit }, totalPrice = total, caseSizeMilli = caseSize,
         )
     }
 
@@ -156,6 +166,11 @@ object VoiceCommandParser {
             val w = t[i]
             when {
                 w == PersianText.COMMA -> { i++; if (cur.name.isNotEmpty() && cur.qty != null) flush() }
+
+                // «۱۰ تا کارتن …»: the count was of cartons.
+                w in caseWords && cur.qty != null && cur.unit == ProductUnit.PIECE && cur.name.isEmpty() -> {
+                    cur.unit = ProductUnit.CARTON; i++
+                }
 
                 // «ربع کیلو» = 250 g, «سه ربع کیلو» = 750 g. Without a unit after it, «ربع» is a name word
                 // (speech recognition often hears «رب» as «ربع»; the matcher reads it as «رب»).
@@ -201,6 +216,12 @@ object VoiceCommandParser {
                     val num = SpokenNumbers.parse(t, i, unitWords.keys)
                     if (num == null) { cur.name += w; i++; continue }
                     val next = t.getOrNull(num.next)
+                    // «کارتن ۱۲ تایی»: how many pieces are in each carton.
+                    if (next in perCountWords && cur.unit == ProductUnit.CARTON && cur.caseSize == null) {
+                        cur.caseSize = num.milli
+                        i = num.next + 1
+                        continue
+                    }
                     // «۵۰۰ گرمی», «نیم کیلویی», «۱.۵ لیتری»: the pack size is part of the product's name,
                     // not a quantity. (Word before the number — «کیلویی ۱۸۰ هزار» — stays a unit price.)
                     if (next != null && PackSize.isSizeWord(next) && next !in unitWords && num.milli < 20_000_000L) {

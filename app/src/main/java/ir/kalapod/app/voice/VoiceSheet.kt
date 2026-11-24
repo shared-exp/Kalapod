@@ -202,7 +202,7 @@ private fun ReviewContent(
     p.command.partyName?.let { Text("طرف حساب: $it") }
 
     p.lines.forEachIndexed { i, line ->
-        val pending = line.needsChoice
+        val pending = line.needsChoice || line.needsCaseSize
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = if (pending) MaterialTheme.colorScheme.secondaryContainer
@@ -219,10 +219,19 @@ private fun ReviewContent(
                 }
                 val unit = (line.product?.unit ?: line.heard.unit
                     ?: line.options.map { it.unit }.distinct().singleOrNull())?.label.orEmpty()
+                val cases = line.casesMilli
                 Text(
-                    "${PersianFormat.quantity(line.quantityMilli)} $unit" +
-                        (line.unitPrice?.let { " × " + PersianFormat.money(it, currency) } ?: ""),
+                    when {
+                        cases != null && line.caseSizeMilli != null ->
+                            "${PersianFormat.quantity(cases)} کارتن ${PersianFormat.quantity(line.caseSizeMilli)}تایی " +
+                                "(${PersianFormat.quantity(line.quantityMilli)} $unit)" +
+                                (line.casePrice?.let { " × " + PersianFormat.money(it, currency) + " هر کارتن" } ?: "")
+                        cases != null -> "${PersianFormat.quantity(cases)} کارتن"
+                        else -> "${PersianFormat.quantity(line.quantityMilli)} $unit" +
+                            (line.unitPrice?.let { " × " + PersianFormat.money(it, currency) } ?: "")
+                    },
                 )
+                if (line.needsCaseSize) CaseSizeQuestion { vm.setCaseSize(i, it) }
                 if (pending) {
                     // The question, by voice and on screen; nothing is pre-selected.
                     Text(
@@ -269,15 +278,17 @@ private fun ReviewContent(
     }
     // Nothing is added until every line is a definite product: no partial carts, nothing assumed.
     val needType = p.lines.count { it.needsChoice }
+    val needSize = p.lines.count { it.needsCaseSize }
     val unknown = p.lines.count { it.isUnknown }
     Button(
         onClick = { onApply(p.lines, p.command); vm.close() },
-        enabled = needType == 0 && unknown == 0 && p.lines.isNotEmpty() && !returnOnWrongScreen,
+        enabled = needType == 0 && needSize == 0 && unknown == 0 && p.lines.isNotEmpty() && !returnOnWrongScreen,
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
     ) {
         Text(
             when {
                 needType > 0 -> "نوع ${PersianFormat.number(needType.toLong())} قلم را انتخاب کنید"
+                needSize > 0 -> "تعداد داخل کارتن را بگویید"
                 unknown > 0 -> "کالای ناشناخته را تعریف یا حذف کنید"
                 expected == VoiceOperation.RETURN -> "ثبت در فرم مرجوعی"
                 else -> "افزودن به سبد"
@@ -315,4 +326,26 @@ private fun optionLabel(o: ir.kalapod.app.domain.voice.CatalogProduct, all: List
         all.map { a -> a.name.trim().split(' ').filter { it.isNotEmpty() }.joinToString(" ") },
     )
     return words.drop(common).joinToString(" ").ifBlank { o.name }
+}
+
+/** «هر کارتن چند تا؟»: common sizes as one tap, or type any number. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CaseSizeQuestion(onAnswer: (Long) -> Unit) {
+    var text by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+    Text("هر کارتن چند تا داره؟", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(6, 10, 12, 20, 24, 48).forEach { n ->
+            FilterChip(selected = false, onClick = { onAnswer(n * 1_000L) }, label = { Text(PersianFormat.number(n.toLong())) })
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.OutlinedTextField(
+            text, { text = it }, singleLine = true, modifier = Modifier.weight(1f),
+            label = { Text("تعداد دیگر") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+        )
+        val n = ir.kalapod.app.core.format.InputParser.quantity(text)
+        TextButton(onClick = { n?.let(onAnswer) }, enabled = n != null && n > 0) { Text("تأیید") }
+    }
 }

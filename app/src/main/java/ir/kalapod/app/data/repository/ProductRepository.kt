@@ -26,6 +26,8 @@ data class ProductDraft(
     val barcodes: List<String>,
     /** Only for new products: stock already on the shelf, valued at [purchasePrice]. */
     val openingStockMilli: Long = 0,
+    /** Pieces per carton/box (milli), if bought by the carton. */
+    val caseSizeMilli: Long? = null,
 )
 
 sealed class SaveResult {
@@ -78,7 +80,7 @@ class ProductRepository @Inject constructor(
                     ProductEntity(
                         name = name, categoryId = d.categoryId, unit = d.unit, salePrice = d.salePrice,
                         lastPurchasePrice = d.purchasePrice, minStockMilli = d.minStockMilli,
-                        leadTimeDays = d.leadTimeDays, createdAt = now, updatedAt = now,
+                        leadTimeDays = d.leadTimeDays, createdAt = now, updatedAt = now, caseSizeMilli = d.caseSizeMilli,
                     ),
                 )
             } else {
@@ -88,7 +90,7 @@ class ProductRepository @Inject constructor(
                     old.copy(
                         name = name, categoryId = d.categoryId, unit = d.unit, salePrice = d.salePrice,
                         lastPurchasePrice = d.purchasePrice, minStockMilli = d.minStockMilli,
-                        leadTimeDays = d.leadTimeDays, updatedAt = now,
+                        leadTimeDays = d.leadTimeDays, updatedAt = now, caseSizeMilli = d.caseSizeMilli,
                     ),
                 )
                 // A new sale price applies to the batch now on sale; later batches keep their own prices.

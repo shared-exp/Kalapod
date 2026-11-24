@@ -39,6 +39,19 @@ object PersianFormat {
     }
 
     /** Milli-unit quantity as a decimal, trailing zeros trimmed: 2500 → ۲٫۵ */
+    /**
+     * Stock or a line counted in cartons when the product has a carton size: «۱۰ کارتن (۱۲۰ عدد)»,
+     * «۹ کارتن و ۶ عدد (۱۱۴ عدد)». Below one carton, or without a size: «۶ عدد».
+     */
+    fun withCases(milli: Long, unitLabel: String, caseSizeMilli: Long?): String {
+        val plain = quantity(milli) + " " + unitLabel
+        if (caseSizeMilli == null || caseSizeMilli <= 0 || Math.abs(milli) < caseSizeMilli) return plain
+        val cases = milli / caseSizeMilli
+        val rest = milli % caseSizeMilli
+        val head = number(cases) + " کارتن" + if (rest != 0L) " و " + quantity(Math.abs(rest)) + " " + unitLabel else ""
+        return "$head ($plain)"
+    }
+
     fun quantity(milli: Long): String {
         val sign = if (milli < 0) "-" else ""
         val abs = Math.abs(milli)

@@ -112,14 +112,15 @@ class TransactionRepository @Inject constructor(
                 d.lines.mapIndexed { i, l ->
                     TransactionItemEntity(
                         transactionId = txId, productId = l.productId, quantityMilli = l.quantityMilli,
-                        unitPrice = l.unitPrice, lineTotal = totals.lineTotals[i], costTotal = totals.netLineValues[i],
+                        unitPrice = l.unitPrice, lineTotal = totals.lineTotals[i], costTotal = totals.netLineValues[i], caseSizeMilli = l.caseSizeMilli,
                     )
                 },
             )
             d.lines.forEachIndexed { i, l ->
                 ledger.receive(l.productId, l.quantityMilli, totals.netLineValues[i], MovementReason.PURCHASE, txId, d.occurredAt, salePrice = l.salePrice)
                 val p = db.productDao().get(l.productId)!!
-                db.productDao().update(p.copy(lastPurchasePrice = l.unitPrice, updatedAt = now))
+                // A carton size said or typed once is remembered for this product.
+                db.productDao().update(p.copy(lastPurchasePrice = l.unitPrice, caseSizeMilli = l.caseSizeMilli ?: p.caseSizeMilli, updatedAt = now))
             }
             if (d.paidAmount > 0) {
                 db.paymentDao().insert(

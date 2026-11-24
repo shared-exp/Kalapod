@@ -180,6 +180,7 @@ class BackupMerger @Inject constructor(
                     put("salePrice", c.long("salePrice")); put("lastPurchasePrice", c.long("lastPurchasePrice"))
                     put("minStockMilli", c.long("minStockMilli")); put("stockMilli", 0L); put("stockValue", 0L)
                     put("leadTimeDays", c.long("leadTimeDays")); put("isArchived", c.long("isArchived"))
+                    c.getColumnIndex("caseSizeMilli").takeIf { it >= 0 && !c.isNull(it) }?.let { put("caseSizeMilli", c.getLong(it)) }
                     put("createdAt", c.long("createdAt")); put("updatedAt", now)
                 })
             }
@@ -236,6 +237,7 @@ class BackupMerger @Inject constructor(
                     put("transactionId", txMap[tx]); put("productId", products[c.long("productId")])
                     put("quantityMilli", c.long("quantityMilli")); put("unitPrice", c.long("unitPrice"))
                     put("lineTotal", c.long("lineTotal")); put("costTotal", c.long("costTotal"))
+                    c.getColumnIndex("caseSizeMilli").takeIf { it >= 0 && !c.isNull(it) }?.let { put("caseSizeMilli", c.getLong(it)) }
                 })
             }
         }

@@ -113,7 +113,11 @@ fun DocumentDetailScreen(
                     Column {
                         Text(r.productName, style = MaterialTheme.typography.titleSmall)
                         SummaryRow(
-                            "${PersianFormat.quantity(r.item.quantityMilli)} ${r.unit.label} × ${PersianFormat.money(r.item.unitPrice, cur)}",
+                            r.item.caseSizeMilli?.takeIf { r.item.quantityMilli > 0 }?.let { size ->
+                                PersianFormat.withCases(r.item.quantityMilli, r.unit.label, size) + " × " +
+                                    PersianFormat.money(ir.kalapod.app.domain.finance.Money.divRoundHalfUp(r.item.lineTotal * size, r.item.quantityMilli), cur) +
+                                    " هر کارتن"
+                            } ?: "${PersianFormat.quantity(r.item.quantityMilli)} ${r.unit.label} × ${PersianFormat.money(r.item.unitPrice, cur)}",
                             PersianFormat.money(r.item.lineTotal, cur),
                         )
                     }

@@ -124,18 +124,18 @@ fun ProductEditScreen(
                 NumberField(f.minStock, { v -> vm.edit { it.copy(minStock = v) } }, "حداقل موجودی (${f.unit.label})", Modifier.weight(1f), decimal = true)
                 NumberField(f.leadTimeDays, { v -> vm.edit { it.copy(leadTimeDays = v) } }, "زمان تأمین (روز)", Modifier.weight(1f))
             }
-            if (f.isNew && f.stockRule != StockRule.FROM_PURCHASE) {
+            if (f.isNew) {
                 NumberField(
                     f.openingStock, { v -> vm.edit { it.copy(openingStock = v) } },
-                    "موجودی فعلی در قفسه (${f.unit.label})" + if (f.stockRule == StockRule.REQUIRED) " *" else "",
+                    (if (f.stockRule == StockRule.FROM_PURCHASE) "تعداد خرید" else "موجودی فعلی در قفسه") +
+                        " (${f.unit.label})" + if (f.stockRule != StockRule.OPTIONAL) " *" else "",
                     Modifier.fillMaxWidth(), decimal = true,
                 )
-            } else if (f.isNew) {
-                Text(
-                    "موجودی با همین خرید ثبت می‌شود.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
+            NumberField(
+                f.caseSize, { v -> vm.edit { it.copy(caseSize = v) } },
+                "هر کارتن/باکس چند ${f.unit.label}؟ (اختیاری)", Modifier.fillMaxWidth(), decimal = true,
+            )
 
             Section("بارکدها")
             if (f.barcodes.isNotEmpty()) {

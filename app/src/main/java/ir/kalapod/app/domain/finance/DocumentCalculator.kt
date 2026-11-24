@@ -2,7 +2,21 @@ package ir.kalapod.app.domain.finance
 
 /** One line of a purchase/sale document. [unitPrice] is per whole unit, in rial. */
 /** [salePrice]: purchases only — the sale price of the batch this line brings in (null = keep the current one). */
-data class LineInput(val productId: Long, val quantityMilli: Long, val unitPrice: Long, val salePrice: Long? = null)
+data class LineInput(
+    val productId: Long,
+    val quantityMilli: Long,
+    val unitPrice: Long,
+    val salePrice: Long? = null,
+    /** Bought by the carton: pieces per carton (milli). [quantityMilli] is in pieces. */
+    val caseSizeMilli: Long? = null,
+    /** Price of one carton; when set, the line total is cartons × this (exact), not pieces × [unitPrice]. */
+    val casePrice: Long? = null,
+) {
+    val lineTotal: Long
+        get() = if (casePrice != null && caseSizeMilli != null && caseSizeMilli > 0) {
+            Money.lineTotal(casePrice, Money.divRoundHalfUp(quantityMilli * Money.MILLI, caseSizeMilli))
+        } else Money.lineTotal(unitPrice, quantityMilli)
+}
 
 data class DocumentTotals(
     val lineTotals: List<Long>,
@@ -31,12 +45,12 @@ object DocumentCalculator {
         lines.any { it.quantityMilli <= 0 } -> Problem.BadQuantity
         lines.any { it.unitPrice < 0 } -> Problem.BadPrice
         discount < 0 || extraCost < 0 -> Problem.NegativeAmount
-        discount > lines.sumOf { Money.lineTotal(it.unitPrice, it.quantityMilli) } -> Problem.DiscountTooLarge
+        discount > lines.sumOf { it.lineTotal } -> Problem.DiscountTooLarge
         else -> null
     }
 
     fun compute(lines: List<LineInput>, discount: Long, extraCost: Long): DocumentTotals {
-        val lineTotals = lines.map { Money.lineTotal(it.unitPrice, it.quantityMilli) }
+        val lineTotals = lines.map { it.lineTotal }
         val subtotal = lineTotals.sum()
         val discountParts = Money.allocate(discount, lineTotals)
         val extraParts = Money.allocate(extraCost, lineTotals)

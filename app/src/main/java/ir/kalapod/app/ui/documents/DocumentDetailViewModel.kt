@@ -175,7 +175,7 @@ class DocumentDetailViewModel @Inject constructor(
             partyLabel = if (isPurchaseSide) "تأمین‌کننده" else "مشتری",
             partyName = d.partyName,
             lines = d.items.map {
-                ir.kalapod.app.data.pdf.InvoiceData.Line(it.productName, it.item.quantityMilli, it.unit.label, it.item.unitPrice, it.item.lineTotal)
+                ir.kalapod.app.data.pdf.InvoiceData.Line(it.productName, it.item.quantityMilli, it.unit.label, it.item.unitPrice, it.item.lineTotal, it.item.caseSizeMilli)
             },
             subtotal = d.tx.subtotal, discount = d.tx.discount, extraCost = d.tx.extraCost, total = d.tx.total,
             paid = paid.coerceIn(0, d.tx.total), reversed = d.tx.status == TransactionStatus.REVERSED, currency = st.currency,

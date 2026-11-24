@@ -46,9 +46,11 @@ import ir.kalapod.app.ui.products.ProductListScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 
+/** Purchase screen («ورود کالا»): opened from Inventory, the dashboard and order suggestions. */
+const val PURCHASE_ROUTE = "purchase"
+
 enum class TopLevel(val route: String, val label: String, val icon: ImageVector) {
     HOME("home", "خانه", Icons.Outlined.Home),
-    PURCHASE("purchase", "خرید", Icons.Outlined.AddShoppingCart),
     SALE("sale", "فروش", Icons.Outlined.PointOfSale),
     INVENTORY("inventory", "انبار", Icons.Outlined.Inventory2),
     REPORTS("more", "بیشتر", Icons.Outlined.MoreHoriz),
@@ -95,7 +97,7 @@ fun KalapodNavHost() {
             composable(TopLevel.HOME.route) {
                 DashboardScreen(
                     onNewSale = { go(TopLevel.SALE.route) },
-                    onNewPurchase = { go(TopLevel.PURCHASE.route) },
+                    onNewPurchase = { nav.navigate(PURCHASE_ROUTE) },
                     onOpenInventory = { go(TopLevel.INVENTORY.route) },
                     onOpenSuggestions = { nav.navigate("suggestions") },
                     onRestoreBackup = { nav.navigate("backup?restore=true") },
@@ -104,33 +106,36 @@ fun KalapodNavHost() {
                 )
             }
             // Screens below are implemented in roadmap steps 1.6–1.8 and 3.3.
-            composable(TopLevel.PURCHASE.route) { PurchaseScreen(
+            // Bringing goods in (خرید) lives under Inventory: it is how new stock enters the shop.
+            composable(PURCHASE_ROUTE) { PurchaseScreen(
+                    onBack = { nav.popBackStack() },
                     onCreateProduct = { code -> nav.navigate("product/edit?from=purchase" + (code?.let { "&barcode=$it" } ?: "")) },
-                    onDefineNamed = { name -> nav.navigate("product/edit?from=purchase&name=" + android.net.Uri.encode(name)) },
+                    onDefineNamed = { name, qty -> nav.navigate("product/edit?from=purchase&qty=$qty&name=" + android.net.Uri.encode(name)) },
                 ) }
             composable(TopLevel.SALE.route) { SaleScreen(
                     onCreateProduct = { code -> nav.navigate("product/edit?from=sale" + (code?.let { "&barcode=$it" } ?: "")) },
-                    onDefineNamed = { name -> nav.navigate("product/edit?from=sale&name=" + android.net.Uri.encode(name)) },
+                    onDefineNamed = { name, _ -> nav.navigate("product/edit?from=sale&name=" + android.net.Uri.encode(name)) },
                 ) }
             composable(TopLevel.INVENTORY.route) {
                 ProductListScreen(
-                    onAdd = { nav.navigate("product/edit") },
+                    onAdd = { nav.navigate(PURCHASE_ROUTE) },
                     onOpen = { id -> nav.navigate("product/edit?id=$id") },
                 )
             }
             composable(
-                "product/edit?id={id}&barcode={barcode}&name={name}&from={from}",
+                "product/edit?id={id}&barcode={barcode}&name={name}&from={from}&qty={qty}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("barcode") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("name") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("from") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("qty") { type = NavType.LongType; defaultValue = 0L },
                 ),
             ) {
                 ProductEditScreen(
                     onDone = { nav.popBackStack() },
                     onOpenDocument = { nav.navigate("document/$it") },
-                    onNewBatch = { nav.popBackStack(); go(TopLevel.PURCHASE.route) },
+                    onNewBatch = { nav.popBackStack(); nav.navigate(PURCHASE_ROUTE) { launchSingleTop = true } },
                 )
             }
             composable(TopLevel.REPORTS.route) {
@@ -159,7 +164,7 @@ fun KalapodNavHost() {
             ) { PartyDetailScreen(onBack = { nav.popBackStack() }, onOpenDocument = { nav.navigate("document/$it") }) }
             composable("reports") { ReportsScreen(onBack = { nav.popBackStack() }) }
             composable("suggestions") {
-                OrderSuggestionsScreen(onBack = { nav.popBackStack() }, onGoToPurchase = { nav.popBackStack(); go(TopLevel.PURCHASE.route) })
+                OrderSuggestionsScreen(onBack = { nav.popBackStack() }, onGoToPurchase = { nav.popBackStack(); nav.navigate(PURCHASE_ROUTE) })
             }
             composable(
                 "backup?restore={restore}",

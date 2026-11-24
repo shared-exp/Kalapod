@@ -40,6 +40,8 @@ data class ProductEntity(
     val stockValue: Long = 0,
     val leadTimeDays: Int = 1,
     val isArchived: Boolean = false,
+    /** Pieces in one carton/box/جعبه (milli), if this product is bought by the carton; null = not known. */
+    val caseSizeMilli: Long? = null,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -126,6 +128,8 @@ data class TransactionItemEntity(
     val lineTotal: Long,
     /** Cost of goods for this line (sales/returns), from the FIFO batches it was taken from. */
     val costTotal: Long = 0,
+    /** Bought by the carton: pieces per carton (milli). [quantityMilli] is still in pieces; shown as cartons. */
+    val caseSizeMilli: Long? = null,
 )
 
 /** Inventory ledger. Stock = SUM(quantityDeltaMilli); value = SUM(valueDelta). */

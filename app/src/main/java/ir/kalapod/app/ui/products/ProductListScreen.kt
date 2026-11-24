@@ -115,7 +115,7 @@ fun ProductListScreen(
         ExtendedFloatingActionButton(
             onClick = onAdd,
             icon = { Icon(Icons.Outlined.Add, null) },
-            text = { Text("کالای جدید") },
+            text = { Text("ورود کالا (خرید)") },
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
         )
     }
@@ -125,7 +125,7 @@ fun ProductListScreen(
 private fun EmptyState(hasFilter: Boolean) {
     Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
         Text(
-            if (hasFilter) "کالایی با این مشخصات پیدا نشد." else "هنوز کالایی تعریف نکرده‌اید.\nبا دکمه «کالای جدید» شروع کنید.",
+            if (hasFilter) "کالایی با این مشخصات پیدا نشد." else "هنوز کالایی ندارید.\nبا دکمه «ورود کالا» کالاها را با تعدادشان ثبت کنید.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -150,12 +150,26 @@ private fun ProductRow(p: ProductEntity, currency: Currency, onClick: () -> Unit
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    PersianFormat.quantity(p.stockMilli),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (low) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                )
-                Text(p.unit.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val size = p.caseSizeMilli
+                if (size != null && size > 0 && Math.abs(p.stockMilli) >= size) {
+                    // Bought by the carton: the shelf is easier to read in cartons.
+                    val rest = p.stockMilli % size
+                    Text(
+                        PersianFormat.number(p.stockMilli / size) + " کارتن" +
+                            if (rest != 0L) " و " + PersianFormat.quantity(Math.abs(rest)) else "",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (low) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    )
+                    Text("${PersianFormat.quantity(p.stockMilli)} ${p.unit.label}", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text(
+                        PersianFormat.quantity(p.stockMilli),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (low) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    )
+                    Text(p.unit.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }

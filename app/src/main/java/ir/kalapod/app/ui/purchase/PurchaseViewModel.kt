@@ -20,6 +20,8 @@ import ir.kalapod.app.ui.cart.CartLine
 import ir.kalapod.app.ui.cart.Settlement
 import ir.kalapod.app.ui.cart.addOrIncrement
 import ir.kalapod.app.ui.cart.withSalePrice
+import ir.kalapod.app.ui.cart.inCases
+import ir.kalapod.app.domain.finance.Money
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -175,7 +177,12 @@ class PurchaseViewModel @Inject constructor(
             edit { s ->
                 var ls = s.lines
                 fetched.forEach { (p, l) ->
-                    ls = ls.addOrIncrement(CartLine.of(p, l.unitPrice ?: p.lastPurchasePrice, s.currency, l.quantityMilli).withSalePrice(p, s.currency))
+                    var line = CartLine.of(p, l.unitPrice ?: p.lastPurchasePrice, s.currency, l.quantityMilli).withSalePrice(p, s.currency)
+                    if (l.casesMilli != null && l.caseSizeMilli != null) {
+                        // «۱۰ کارتن ۱۲ تایی»: the cart shows cartons; stock gets 120 pieces.
+                        line = line.inCases(l.casesMilli, l.caseSizeMilli, l.casePrice ?: Money.lineTotal(p.lastPurchasePrice, l.caseSizeMilli), s.currency)
+                    }
+                    ls = ls.addOrIncrement(line)
                 }
                 s.copy(
                     lines = ls,
@@ -203,7 +210,16 @@ class PurchaseViewModel @Inject constructor(
             val fetched = items.mapNotNull { (id, q) -> products.get(id)?.let { it to q } }
             edit { s ->
                 var ls = s.lines
-                fetched.forEach { (p, q) -> ls = ls.addOrIncrement(CartLine.of(p, prices[p.id] ?: p.lastPurchasePrice, s.currency, q).withSalePrice(p, s.currency, salePrices[p.id])) }
+                fetched.forEach { (p, q) ->
+                    val price = prices[p.id] ?: p.lastPurchasePrice
+                    var line = CartLine.of(p, price, s.currency, q).withSalePrice(p, s.currency, salePrices[p.id])
+                    val size = p.caseSizeMilli
+                    // Whole cartons of a product bought by the carton are shown as cartons.
+                    if (size != null && size > 0 && q >= size && (q * Money.MILLI) % size == 0L && (q % size) == 0L) {
+                        line = line.inCases(Money.divRoundHalfUp(q * Money.MILLI, size), size, Money.lineTotal(price, size), s.currency)
+                    }
+                    ls = ls.addOrIncrement(line)
+                }
                 s.copy(lines = ls)
             }
         }

@@ -155,4 +155,24 @@ class BatchFifoTest {
         assertEquals(160_000L + 45_000L + 95_000L, p.stockValue)
         consistent(id)
     }
+
+    /** «۱۰ کارتن ۱۲ تایی کیک» at 480,000 a carton: 120 pieces in stock, the invoice keeps the cartons. */
+    @Test fun purchaseByTheCarton() = runBlocking {
+        val cake = (products.save(ProductDraft(name = "کیک نادری", categoryId = null, unit = ProductUnit.PIECE, salePrice = 50_000,
+            purchasePrice = 0, minStockMilli = 0, leadTimeDays = 1, barcodes = emptyList())) as SaveResult.Saved).id
+        val r = tx.postPurchase(PurchaseDraft("c1", listOf(LineInput(cake, 120_000, 40_000, caseSizeMilli = 12_000, casePrice = 480_000)),
+            paidAmount = 4_800_000)) as PostResult.Posted
+        assertEquals(4_800_000L, r.total)
+        val item = db.transactionDao().items(r.transactionId).single()
+        assertEquals(120_000L, item.quantityMilli)
+        assertEquals(12_000L, item.caseSizeMilli)
+        val p = products.get(cake)!!
+        assertEquals(120_000L, p.stockMilli)
+        assertEquals(4_800_000L, p.stockValue)
+        assertEquals("carton size remembered", 12_000L, p.caseSizeMilli)
+        // A price that doesn't divide evenly: the total is still exactly cartons × carton price.
+        val odd = tx.postPurchase(PurchaseDraft("c2", listOf(LineInput(cake, 36_000, 41_667, caseSizeMilli = 12_000, casePrice = 500_000)),
+            paidAmount = 1_500_000)) as PostResult.Posted
+        assertEquals(1_500_000L, odd.total)
+    }
 }

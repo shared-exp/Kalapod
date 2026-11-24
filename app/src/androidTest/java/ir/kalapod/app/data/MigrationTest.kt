@@ -65,4 +65,22 @@ class MigrationTest {
         db.close()
         ctx.deleteDatabase(n)
     }
+
+    /** v3 → v4: carton size columns; existing rows untouched. */
+    @Test fun v3ToV4AddsCartonSize(): Unit = runBlocking {
+        val n = "migration-test-4.db"
+        helper.createDatabase(n, 3).apply {
+            execSQL(
+                "INSERT INTO products (id, name, unit, salePrice, lastPurchasePrice, minStockMilli, stockMilli, stockValue, " +
+                    "leadTimeDays, isArchived, createdAt, updatedAt) VALUES (1, 'کیک نادری', 'PIECE', 50000, 40000, 0, 0, 0, 1, 0, 0, 0)",
+            )
+            close()
+        }
+        helper.runMigrationsAndValidate(n, 4, true, *KalapodDatabase.MIGRATIONS).close()
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = Room.databaseBuilder(ctx, KalapodDatabase::class.java, n).addMigrations(*KalapodDatabase.MIGRATIONS).build()
+        assertEquals(null, db.productDao().get(1)!!.caseSizeMilli)
+        db.close()
+        ctx.deleteDatabase(n)
+    }
 }

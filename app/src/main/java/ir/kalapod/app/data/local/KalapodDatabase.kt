@@ -34,7 +34,7 @@ import ir.kalapod.app.data.local.entity.TransactionItemEntity
         InvoiceEntity::class, PaymentEntity::class, StockAlertEntity::class, SettingEntity::class,
         ir.kalapod.app.data.local.entity.ProductAliasEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -87,6 +87,13 @@ abstract class KalapodDatabase : RoomDatabase() {
                 )
             }
         }
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /** v4: carton size (pieces per carton/box) on products and on purchase lines bought by the carton. */
+        val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `products` ADD COLUMN `caseSizeMilli` INTEGER")
+                db.execSQL("ALTER TABLE `transaction_items` ADD COLUMN `caseSizeMilli` INTEGER")
+            }
+        }
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     }
 }

@@ -12,6 +12,8 @@ data class CatalogProduct(
     val lastPurchasePrice: Long,
     /** Current stock (milli-units), shown next to each option when the user picks a type. */
     val stockMilli: Long = 0,
+    /** Pieces per carton/box (milli), if known for this product. */
+    val caseSizeMilli: Long? = null,
 )
 
 /** One heard item mapped onto the catalog, ready to drop into a cart (after the user confirms). */
@@ -29,7 +31,15 @@ data class ResolvedLine(
     val generic: Boolean = false,
     /** Purchases: what was heard may be a product we don't stock yet; offer «کالای جدید». */
     val allowNew: Boolean = false,
+    /** Said in cartons/boxes: how many cartons (milli). [quantityMilli] is then in pieces. */
+    val casesMilli: Long? = null,
+    /** Pieces per carton (milli): said («۱۲ تایی») or known for the product. */
+    val caseSizeMilli: Long? = null,
+    /** Price of one carton, when the price was said per carton. */
+    val casePrice: Long? = null,
 ) {
+    /** Said in cartons but the carton size is not known yet: ask «هر کارتن چند تا؟». */
+    val needsCaseSize get() = product != null && casesMilli != null && caseSizeMilli == null
     val needsChoice get() = product == null && options.isNotEmpty()
     val isUnknown get() = product == null && options.isEmpty()
 }
@@ -87,7 +97,14 @@ object VoiceResolver {
     /** Re-fits a line after the user picks/defines its product. */
     fun choose(line: ResolvedLine, product: CatalogProduct, forPurchase: Boolean) = fit(line.heard, product, forPurchase)
 
+    /** The user answered «هر کارتن چند تا؟». */
+    fun withCaseSize(line: ResolvedLine, caseSizeMilli: Long, forPurchase: Boolean): ResolvedLine {
+        val p = line.product ?: return line
+        return fit(line.heard.copy(caseSizeMilli = caseSizeMilli), p, forPurchase)
+    }
+
     private fun fit(item: ParsedItem, p: CatalogProduct, forPurchase: Boolean): ResolvedLine {
+        if (item.unit == ProductUnit.CARTON && p.unit != ProductUnit.CARTON) return fitCases(item, p, forPurchase)
         val notes = mutableListOf<String>()
         var qty = item.quantityMilli ?: Money.MILLI.also { notes += "مقدار گفته نشد؛ ۱ در نظر گرفته شد" }
         val spokenUnit = item.unit
@@ -114,6 +131,33 @@ object VoiceResolver {
             if (def == 0L) notes += "قیمت گفته نشد"
         }
         return ResolvedLine(item, p, emptyList(), qty, price, notes)
+    }
+
+    /**
+     * «۱۰ کارتن ۱۲ تایی کیک»: 10 cartons × 12 = 120 pieces in stock; the cart and invoice show cartons.
+     * Without a size said or known for the product, the line waits for «هر کارتن چند تا؟».
+     */
+    private fun fitCases(item: ParsedItem, p: CatalogProduct, forPurchase: Boolean): ResolvedLine {
+        val notes = mutableListOf<String>()
+        val cases = item.quantityMilli ?: Money.MILLI.also { notes += "تعداد کارتن گفته نشد؛ ۱ در نظر گرفته شد" }
+        val size = item.caseSizeMilli ?: p.caseSizeMilli
+        // A price said "per carton" (کارتنی) or with the carton count (no other unit) is a carton price.
+        val perCase = item.unitPrice?.takeIf { (item.priceUnit ?: ProductUnit.CARTON) == ProductUnit.CARTON }
+        val perPiece = item.unitPrice?.takeIf { item.priceUnit != null && item.priceUnit != ProductUnit.CARTON && item.priceUnit == p.unit }
+        val casePrice = perCase ?: item.totalPrice?.let { Money.divRoundHalfUp(it * Money.MILLI, cases) }
+        if (size == null) {
+            return ResolvedLine(item, p, emptyList(), cases, null, notes, casesMilli = cases, casePrice = casePrice)
+        }
+        val pieces = Money.divRoundHalfUp(cases * size, Money.MILLI)
+        val unitPrice = perPiece ?: casePrice?.let { Money.divRoundHalfUp(it * Money.MILLI, size) }
+        if (unitPrice == null) {
+            val def = if (forPurchase) p.lastPurchasePrice else p.salePrice
+            if (def == 0L) notes += "قیمت گفته نشد"
+        }
+        return ResolvedLine(
+            item, p, emptyList(), pieces, unitPrice, notes,
+            casesMilli = cases, caseSizeMilli = size, casePrice = casePrice ?: perPiece?.let { Money.lineTotal(it, size) },
+        )
     }
 
     private fun factor(u: ProductUnit): Long? = when (u) {

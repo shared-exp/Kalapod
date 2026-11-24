@@ -54,7 +54,7 @@ import ir.kalapod.app.ui.cart.SummaryRow
 @Composable
 fun SaleScreen(
     onCreateProduct: (barcode: String?) -> Unit,
-    onDefineNamed: (name: String) -> Unit,
+    onDefineNamed: (name: String, quantityMilli: Long) -> Unit,
     vm: SaleViewModel = hiltViewModel(),
     voiceVm: VoiceViewModel = hiltViewModel(),
 ) {
@@ -155,7 +155,7 @@ fun SaleScreen(
     VoiceSheet(
         voiceVm, VoiceOperation.SALE, cur,
         onApply = vm::applyVoice,
-        onDefine = { name -> voiceVm.awaitingDefine = true; onDefineNamed(name) },
+        onDefine = { name -> voiceVm.awaitingDefine = true; onDefineNamed(name, 0) },
     )
 
     if (showScanner) {

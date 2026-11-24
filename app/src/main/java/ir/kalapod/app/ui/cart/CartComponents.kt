@@ -65,7 +65,13 @@ fun CartLineCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     line.quantityText, { onChange(line.copy(quantityText = it)) },
-                    label = { Text("مقدار (${line.unit.label})") }, singleLine = true, modifier = Modifier.weight(1f),
+                    label = {
+                        Text(
+                            if (line.byCase) "کارتن ${PersianFormat.quantity(line.caseSizeMilli!!)}تایی"
+                            else "مقدار (${line.unit.label})",
+                        )
+                    },
+                    singleLine = true, modifier = Modifier.weight(1f),
                     isError = line.quantityMilli() == null,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = if (line.unit.allowsFraction) KeyboardType.Decimal else KeyboardType.Number,
@@ -73,12 +79,26 @@ fun CartLineCard(
                 )
                 OutlinedTextField(
                     line.priceText, { onChange(line.copy(priceText = it)) },
-                    label = { Text("قیمت واحد (${currency.label})") }, singleLine = true, modifier = Modifier.weight(1.4f),
+                    label = { Text(if (line.byCase) "قیمت هر کارتن (${currency.label})" else "قیمت واحد (${currency.label})") },
+                    singleLine = true, modifier = Modifier.weight(1.4f),
                     isError = line.unitPrice(currency) == null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
             }
-            val tiers = line.tiers(currency)
+            if (showSalePrice && line.knownCaseSizeMilli != null) {
+                // Same goods, counted by the carton or by the piece.
+                androidx.compose.material3.FilterChip(
+                    selected = line.byCase, onClick = { onChange(line.toggleCases(currency)) },
+                    label = { Text("خرید کارتنی (${PersianFormat.quantity(line.knownCaseSizeMilli)}تایی)") },
+                )
+            }
+            if (line.byCase) {
+                line.pieces()?.let {
+                    Text("= ${PersianFormat.quantity(it)} ${line.unit.label} به انبار", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            val tiers = if (line.byCase) null else line.tiers(currency)
             if (tiers != null && tiers.size > 1) {
                 Text(
                     "اول بار قدیمی: " + tiers.joinToString(" + ") {
@@ -90,7 +110,8 @@ fun CartLineCard(
             if (showSalePrice) {
                 OutlinedTextField(
                     line.salePriceText, { onChange(line.copy(salePriceText = it)) },
-                    label = { Text("قیمت فروش این بار (${currency.label})") }, singleLine = true,
+                    label = { Text("قیمت فروش این بار (${currency.label}" + (if (line.byCase) "، هر ${line.unit.label})" else ")")) },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )

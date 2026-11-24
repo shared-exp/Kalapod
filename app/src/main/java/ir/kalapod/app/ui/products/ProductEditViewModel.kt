@@ -34,6 +34,8 @@ data class ProductForm(
     val minStock: String = "",
     val leadTimeDays: String = "1",
     val openingStock: String = "",
+    /** Optional: pieces in one carton/box («هر کارتن چند تا؟»). */
+    val caseSize: String = "",
     /** How a new product's stock is entered here (depends on where the form was opened). */
     val stockRule: StockRule = StockRule.REQUIRED,
     val barcodes: List<String> = emptyList(),
@@ -74,6 +76,8 @@ class ProductEditViewModel @Inject constructor(
     private val productId: Long = savedState.get<Long>("id") ?: 0L
     private val initialBarcode: String? = savedState.get<String>("barcode")?.takeIf { it.isNotBlank() }
     private val initialName: String = savedState.get<String>("name").orEmpty()
+    /** Quantity heard by voice for a product defined while buying (pieces, milli). */
+    private val initialQty: Long = savedState.get<Long>("qty") ?: 0L
     private val stockRule = when (savedState.get<String>("from")) {
         "purchase" -> StockRule.FROM_PURCHASE
         "sale" -> StockRule.OPTIONAL
@@ -91,7 +95,10 @@ class ProductEditViewModel @Inject constructor(
             val cur = settings.settings.first().currency
             val p = if (productId != 0L) repo.get(productId) else null
             _form.value = if (p == null) {
-                ProductForm(loaded = true, currency = cur, barcodes = listOfNotNull(initialBarcode), name = initialName, stockRule = stockRule)
+                ProductForm(
+                    loaded = true, currency = cur, barcodes = listOfNotNull(initialBarcode), name = initialName, stockRule = stockRule,
+                    openingStock = if (initialQty > 0) InputParser.quantityForEdit(initialQty) else "",
+                )
             } else {
                 ProductForm(
                     loaded = true, isNew = false, name = p.name, categoryId = p.categoryId, unit = p.unit,
@@ -99,6 +106,7 @@ class ProductEditViewModel @Inject constructor(
                     purchasePrice = InputParser.moneyForEdit(p.lastPurchasePrice, cur),
                     minStock = if (p.minStockMilli == 0L) "" else InputParser.quantityForEdit(p.minStockMilli),
                     leadTimeDays = p.leadTimeDays.toString(),
+                    caseSize = p.caseSizeMilli?.let { InputParser.quantityForEdit(it) }.orEmpty(),
                     barcodes = repo.barcodesOf(p.id), isArchived = p.isArchived, currency = cur,
                 )
             }
@@ -133,7 +141,9 @@ class ProductEditViewModel @Inject constructor(
             ?: return fail("زمان تأمین نامعتبر است.")
         val opening = if (f.openingStock.isBlank()) 0L else InputParser.quantity(f.openingStock)
             ?: return fail("موجودی اولیه نامعتبر است.")
-        if (f.isNew && f.stockRule == StockRule.REQUIRED && opening <= 0L) {
+        val caseSize = if (f.caseSize.isBlank()) null else InputParser.quantity(f.caseSize)?.takeIf { it > 0 }
+            ?: return fail("تعداد داخل کارتن نامعتبر است.")
+        if (f.isNew && f.stockRule != StockRule.OPTIONAL && opening <= 0L) {
             return fail("موجودی فعلی را وارد کنید؛ کالا با موجودی صفر ثبت نمی‌شود.")
         }
         if (opening > 0 && buy == 0L) return fail("برای ثبت موجودی اولیه، قیمت خرید را وارد کنید.")
@@ -146,8 +156,15 @@ class ProductEditViewModel @Inject constructor(
                     id = productId, name = f.name, categoryId = f.categoryId, unit = f.unit,
                     salePrice = sale, purchasePrice = buy, minStockMilli = min, leadTimeDays = lead.coerceAtLeast(0),
                     barcodes = codes, openingStockMilli = if (f.isNew && f.stockRule != StockRule.FROM_PURCHASE) opening else 0,
+                    caseSizeMilli = caseSize,
                 ),
             )
+            // Defined while buying: the goods go into the purchase cart (with this form's quantity and prices).
+            if (r is SaveResult.Saved && f.isNew && f.stockRule == StockRule.FROM_PURCHASE) {
+                pending.items = listOf(r.id to opening)
+                pending.prices = if (buy > 0) mapOf(r.id to buy) else emptyMap()
+                pending.salePrices = mapOf(r.id to sale)
+            }
             _form.update {
                 when (r) {
                     is SaveResult.Saved -> it.copy(saving = false, done = true)
