@@ -14,7 +14,10 @@ data class ParsedItem(
     /** Unit the price refers to ("کیلویی" → KILOGRAM) when it differs from [unit]. */
     val priceUnit: ProductUnit?,
     val totalPrice: Long?,
-)
+) {
+    /** The name as the user should see it: internal size tokens («#700») shown as plain numbers. */
+    val shownName: String get() = PackSize.readable(name)
+}
 
 data class ParsedCommand(
     val operation: VoiceOperation?,

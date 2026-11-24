@@ -54,19 +54,19 @@ object VoiceResolver {
                     ResolvedLine(
                         item, null, ProductMatcher.rank(item.name, candidates).filter { it.score >= 0.5 }.take(4)
                             .map { byId.getValue(it.candidate.id) },
-                        item.quantityMilli ?: Money.MILLI, null, listOf("کدام «${item.name}»؟"), allowNew = true,
+                        item.quantityMilli ?: Money.MILLI, null, listOf("کدام «${item.shownName}»؟"), allowNew = true,
                     )
                 } else {
                     fit(item, byId.getValue(m.candidate.id), forPurchase)
                 }
                 is ProductMatcher.Match.Ambiguous -> ResolvedLine(
                     item, null, m.options.map { byId.getValue(it.id) },
-                    item.quantityMilli ?: Money.MILLI, null, listOf("کدام «${item.name}»؟"), generic = m.generic,
+                    item.quantityMilli ?: Money.MILLI, null, listOf("کدام «${item.shownName}»؟"), generic = m.generic,
                     allowNew = forPurchase,
                 )
                 ProductMatcher.Match.None -> ResolvedLine(
                     item, null, emptyList(), item.quantityMilli ?: Money.MILLI, null,
-                    listOf("«${item.name}» در کالاها نیست"),
+                    listOf("«${item.shownName}» در کالاها نیست"),
                 )
             }
         }

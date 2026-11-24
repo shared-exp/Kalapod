@@ -71,6 +71,10 @@ object PackSize {
         return "#" + if (frac == 0L) "$whole" else "$whole.${frac.toString().padStart(3, '0').trimEnd('0')}"
     }
 
+    /** «رب #700 چین چین» → «رب 700 چین چین»: bare-size markers are internal and never shown. */
+    fun readable(name: String): String =
+        name.split(' ').joinToString(" ") { if (isBare(it)) it.drop(1) else it }
+
     fun isBare(token: String) = token.startsWith("#") && token.drop(1).toDoubleOrNull() != null
 
     /**

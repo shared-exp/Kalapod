@@ -97,6 +97,10 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) 
             if (modelInstalled) {
                 OutlinedButton(onClick = { vm.offlineModel.uninstall(); modelInstalled = false }) { Text("حذف بسته آفلاین (آزادسازی ۱۴۰ مگابایت)") }
             }
+            Text(
+                "نسخه ${ir.kalapod.app.BuildConfig.VERSION_NAME} — ساخت ${ir.kalapod.app.BuildConfig.BUILD_STAMP}",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

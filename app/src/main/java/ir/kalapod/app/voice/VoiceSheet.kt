@@ -212,7 +212,7 @@ private fun ReviewContent(
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        line.product?.name ?: line.heard.name,
+                        line.product?.name ?: line.heard.shownName,
                         style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = { vm.drop(i) }) { Icon(Icons.Outlined.Close, "حذف") }
@@ -226,7 +226,7 @@ private fun ReviewContent(
                 if (pending) {
                     // The question, by voice and on screen; nothing is pre-selected.
                     Text(
-                        "کدام «${line.heard.name}»؟",
+                        "کدام «${line.heard.shownName}»؟",
                         style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -251,15 +251,15 @@ private fun ReviewContent(
                         if (line.allowNew) {
                             FilterChip(
                                 selected = false,
-                                onClick = { onDefine(line.heard.name) },
-                                label = { Text("«${line.heard.name}» کالای جدید است", style = MaterialTheme.typography.titleSmall) },
+                                onClick = { onDefine(line.heard.shownName) },
+                                label = { Text("«${line.heard.shownName}» کالای جدید است", style = MaterialTheme.typography.titleSmall) },
                                 leadingIcon = { Icon(Icons.Outlined.Add, null) },
                             )
                         }
                     }
                 }
                 if (line.isUnknown) {
-                    TextButton(onClick = { onDefine(line.heard.name) }) { Text("تعریف «${line.heard.name}» به‌عنوان کالای جدید") }
+                    TextButton(onClick = { onDefine(line.heard.shownName) }) { Text("تعریف «${line.heard.shownName}» به‌عنوان کالای جدید") }
                 }
                 line.notes.filterNot { line.needsChoice && it.startsWith("کدام") }.forEach {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)

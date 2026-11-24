@@ -1,3 +1,6 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,6 +19,8 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        // Build stamp shown in Settings, so the shop can tell which APK is installed.
+        buildConfigField("String", "BUILD_STAMP", "\"" + SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date()) + "\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

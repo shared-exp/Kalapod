@@ -70,4 +70,20 @@ class ConsecutiveItemsTest {
         // Nothing after it: not a new item.
         assertEquals(1, items("یه روغن لادن ۲").size)
     }
+
+    /** Reported: speech recognition heard «یه ربع بعد» between two items. */
+    @Test fun misheardMiddleItemStaysSeparate() {
+        assertEquals(
+            listOf("روغن لادن" to 1_000L, "ربع بعد" to 1_000L, "پنیر صبا" to 1_000L),
+            items("یه روغن لادن یه ربع بعد یه پنیر صبا"),
+        )
+        val ids = ids("یه روغن لادن یه ربع بعد یه پنیر صبا")
+        assertEquals(1L, ids.first().first)
+        assertEquals(2L, ids.last().first)
+    }
+
+    @Test fun internalSizeMarkersAreNeverShown() {
+        val item = VoiceCommandParser.parse("۱۰ تا رب ۷۰۰ چین چین").items.single()
+        assertEquals("رب 700 چین چین", item.shownName)
+    }
 }
