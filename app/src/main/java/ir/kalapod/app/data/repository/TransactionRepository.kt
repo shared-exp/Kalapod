@@ -18,6 +18,8 @@ import ir.kalapod.app.domain.finance.DocumentCalculator
 import ir.kalapod.app.domain.finance.LineInput
 import ir.kalapod.app.domain.finance.Money
 import ir.kalapod.app.domain.finance.StockPosition
+import ir.kalapod.app.core.format.PersianFormat
+import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
@@ -56,6 +58,20 @@ data class SaleDraft(
     val allowOversell: Boolean = false,
     val note: String? = null,
     val occurredAt: Long = System.currentTimeMillis(),
+)
+
+/** A posted sale loaded back into the sale screen for editing. */
+data class SaleForEdit(
+    val originalId: Long,
+    val invoiceNumber: String,
+    val lines: List<LineInput>,
+    val discount: Long,
+    val customerId: Long?,
+    val customerName: String?,
+    val received: Long,
+    val receivedMethod: PaymentMethod,
+    val total: Long,
+    val occurredAt: Long,
 )
 
 data class ReturnLine(val productId: Long, val quantityMilli: Long)
@@ -316,6 +332,50 @@ class TransactionRepository @Inject constructor(
             }
             val number = issueInvoice(txId, if (isSale) "SR" else "PR", d.occurredAt)
             PostResult.Posted(txId, number, total)
+        }
+    }
+
+    /** A posted sale as it was entered, to edit it. Null if it can't be edited (cancelled, a return, …). */
+    suspend fun saleForEdit(id: Long): SaleForEdit? {
+        val dao = db.transactionDao()
+        val tx = dao.get(id) ?: return null
+        if (tx.type != TransactionType.SALE || tx.status != TransactionStatus.POSTED || tx.reversesId != null) return null
+        val pays = db.paymentDao().forTransaction(id).filter { it.reversesPaymentId == null }
+        return SaleForEdit(
+            originalId = id,
+            invoiceNumber = db.invoiceDao().forTransaction(id)?.number.orEmpty(),
+            lines = dao.items(id).map { LineInput(it.productId, it.quantityMilli, it.unitPrice) },
+            discount = tx.discount,
+            customerId = tx.customerId,
+            customerName = tx.customerId?.let { cid -> db.partyDao().observeCustomers().first().firstOrNull { it.id == cid }?.name },
+            received = pays.sumOf { if (it.direction == PaymentDirection.IN) it.amount else -it.amount },
+            receivedMethod = pays.firstOrNull()?.method ?: PaymentMethod.CASH,
+            total = tx.total,
+            occurredAt = tx.occurredAt,
+        )
+    }
+
+    private class Abort(val result: PostResult) : RuntimeException()
+
+    /**
+     * Edits a posted sale the accountable way: the original is cancelled (reversal document, stock and money
+     * put back) and the corrected sale is posted as a new invoice noting which one it replaces. Both happen
+     * in one database transaction — if the new sale can't be posted, nothing changes.
+     */
+    suspend fun correctSale(originalId: Long, d: SaleDraft): PostResult {
+        db.transactionDao().byUuid(d.clientUuid)?.let { return PostResult.AlreadyPosted(it.id) }
+        val number = db.invoiceDao().forTransaction(originalId)?.number.orEmpty()
+        return try {
+            db.withTransaction {
+                val rev = reverse(originalId, "ویرایش فاکتور", d.occurredAt)  // same date: that day's reports stay right
+                if (rev !is PostResult.Posted) throw Abort(rev)
+                val note = listOfNotNull("اصلاح فاکتور ${PersianFormat.ltr(number)}", d.note).joinToString(" — ")
+                val posted = postSale(d.copy(note = note))
+                if (posted !is PostResult.Posted) throw Abort(posted)
+                posted
+            }
+        } catch (a: Abort) {
+            a.result
         }
     }
 

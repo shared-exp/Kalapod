@@ -115,6 +115,7 @@ fun KalapodNavHost() {
             composable(TopLevel.SALE.route) { SaleScreen(
                     onCreateProduct = { code -> nav.navigate("product/edit?from=sale" + (code?.let { "&barcode=$it" } ?: "")) },
                     onDefineNamed = { name, _ -> nav.navigate("product/edit?from=sale&name=" + android.net.Uri.encode(name)) },
+                    onOpenDocument = { nav.navigate("document/$it") },
                 ) }
             composable(TopLevel.INVENTORY.route) {
                 ProductListScreen(
@@ -172,7 +173,10 @@ fun KalapodNavHost() {
             ) { entry -> BackupScreen(onBack = { nav.popBackStack() }, startRestore = entry.arguments?.getBoolean("restore") == true) }
             composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable("document/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) {
-                DocumentDetailScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("document/$it") })
+                DocumentDetailScreen(
+                    onBack = { nav.popBackStack() }, onOpen = { nav.navigate("document/$it") },
+                    onEditSale = { go(TopLevel.SALE.route) },
+                )
             }
         }
     }

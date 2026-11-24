@@ -65,7 +65,11 @@ class DocumentDetailViewModel @Inject constructor(
     private val repo: TransactionRepository,
     private val settings: SettingsRepository,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val pendingEdit: ir.kalapod.app.ui.sale.PendingSaleEdit,
 ) : ViewModel() {
+    /** Opens this sale in the sale screen for editing. */
+    fun requestEdit() { pendingEdit.id = id }
+
     private val id: Long = savedState["id"] ?: 0L
     private val _state = MutableStateFlow(DetailState())
     val state: StateFlow<DetailState> = _state.asStateFlow()

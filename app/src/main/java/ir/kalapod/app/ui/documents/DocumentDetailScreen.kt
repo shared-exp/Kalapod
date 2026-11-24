@@ -64,6 +64,7 @@ import ir.kalapod.app.voice.VoiceViewModel
 fun DocumentDetailScreen(
     onBack: () -> Unit,
     onOpen: (Long) -> Unit,
+    onEditSale: () -> Unit = {},
     vm: DocumentDetailViewModel = hiltViewModel(),
     voiceVm: VoiceViewModel = hiltViewModel(key = "return-voice"),
 ) {
@@ -164,6 +165,11 @@ fun DocumentDetailScreen(
                     onClick = { scope.launch { runCatching { vm.pdf() }.onSuccess { InvoiceActions.print(context, it, it.nameWithoutExtension) } } },
                     modifier = Modifier.weight(1f),
                 ) { Text("چاپ") }
+            }
+            if (d.canReverse && d.tx.type == ir.kalapod.app.data.local.entity.TransactionType.SALE && d.tx.reversesId == null) {
+                FilledTonalButton(onClick = { vm.requestEdit(); onEditSale() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("ویرایش فاکتور")
+                }
             }
             if (d.canReturn) {
                 FilledTonalButton(onClick = { vm.startReturn(); showReturn = true }, modifier = Modifier.fillMaxWidth()) {

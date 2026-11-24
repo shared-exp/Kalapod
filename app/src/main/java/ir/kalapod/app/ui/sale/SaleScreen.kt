@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -55,6 +58,7 @@ import ir.kalapod.app.ui.cart.SummaryRow
 fun SaleScreen(
     onCreateProduct: (barcode: String?) -> Unit,
     onDefineNamed: (name: String, quantityMilli: Long) -> Unit,
+    onOpenDocument: (Long) -> Unit = {},
     vm: SaleViewModel = hiltViewModel(),
     voiceVm: VoiceViewModel = hiltViewModel(),
 ) {
@@ -70,16 +74,32 @@ fun SaleScreen(
     val snackbar = remember { SnackbarHostState() }
     val cur = s.currency
     val totals = vm.totals(s)
+    val recent by vm.recentSales.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { vm.consumePendingEdit() }
 
     LaunchedEffect(s.lastPosted) {
         s.lastPosted?.let {
-            snackbar.showSnackbar("فروش ثبت شد — فاکتور ${PersianFormat.ltr(it.invoiceNumber)}")
+            snackbar.showSnackbar("ثبت شد — فاکتور ${PersianFormat.ltr(it.invoiceNumber)}")
             vm.consumePosted()
         }
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
         Text("ثبت فروش", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp, 12.dp))
+        s.editingNumber?.let { number ->
+            androidx.compose.material3.Card(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+            ) {
+                Row(Modifier.padding(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text(
+                        "ویرایش فاکتور ${PersianFormat.ltr(number)} — با ذخیره، فاکتور قبلی باطل و فاکتور اصلاح‌شده ثبت می‌شود.",
+                        style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.TextButton(onClick = vm::cancelEdit) { Text("انصراف") }
+                }
+            }
+        }
         LazyColumn(
             Modifier.weight(1f),
             contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 16.dp),
@@ -98,6 +118,13 @@ fun SaleScreen(
                     onScan = { vm.scanFeedback.value = ""; showScanner = true },
                     onVoice = { voiceVm.begin(forPurchase = false) },
                 )
+            }
+            // Sales history: every sale, newest first; tap to open, pencil to edit.
+            if (s.lines.isEmpty() && s.editingId == null && recent.isNotEmpty()) {
+                item { Text("فروش‌های اخیر", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp)) }
+                items(recent.size, key = { "sale-" + recent[it].tx.id }) { k ->
+                    SaleHistoryRow(recent[k], cur, onOpen = { onOpenDocument(recent[k].tx.id) }, onEdit = { vm.startEdit(recent[k].tx.id) })
+                }
             }
             if (s.lines.isNotEmpty()) {
                 item {
@@ -143,7 +170,7 @@ fun SaleScreen(
                         enabled = !s.posting,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                         shape = MaterialTheme.shapes.large,
-                    ) { Text("ثبت فروش", style = MaterialTheme.typography.titleMedium) }
+                    ) { Text(if (s.editingId != null) "ذخیره ویرایش" else "ثبت فروش", style = MaterialTheme.typography.titleMedium) }
                 }
             }
         }
@@ -218,5 +245,41 @@ fun SaleScreen(
             confirmButton = { TextButton(onClick = { vm.post(allowOversell = true) }) { Text("با این حال ثبت کن") } },
             dismissButton = { TextButton(onClick = vm::dismissShortages) { Text("انصراف") } },
         )
+    }
+}
+
+@Composable
+private fun SaleHistoryRow(
+    r: ir.kalapod.app.data.local.dao.DocumentRow, cur: ir.kalapod.app.core.format.Currency,
+    onOpen: () -> Unit, onEdit: () -> Unit,
+) {
+    val reversed = r.tx.status == ir.kalapod.app.data.local.entity.TransactionStatus.REVERSED
+    androidx.compose.material3.Card(
+        Modifier.fillMaxWidth().clickable(onClick = onOpen),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+    ) {
+        Row(Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    PersianFormat.money(r.tx.total, cur) + if (reversed) " (باطل‌شده)" else "",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (reversed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    textDecoration = if (reversed) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                )
+                Text(
+                    listOfNotNull(r.customerName, "${PersianFormat.number(r.itemCount.toLong())} قلم").joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    ir.kalapod.app.ui.common.formatDateTime(r.tx.occurredAt) + "  " + PersianFormat.ltr(r.invoiceNumber.orEmpty()),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (!reversed) {
+                androidx.compose.material3.IconButton(onClick = onEdit) {
+                    Icon(androidx.compose.material.icons.Icons.Outlined.Edit, "ویرایش")
+                }
+            }
+        }
     }
 }

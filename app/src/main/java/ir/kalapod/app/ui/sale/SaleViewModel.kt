@@ -47,7 +47,15 @@ data class SaleState(
     /** Set when the repository refused for low stock; the UI asks for explicit confirmation. */
     val shortages: List<Shortage> = emptyList(),
     val lastPosted: PostResult.Posted? = null,
+    /** Editing a posted sale: saving cancels it and posts the corrected one in its place. */
+    val editingId: Long? = null,
+    val editingNumber: String? = null,
+    val editingAt: Long? = null,
 )
+
+/** Hands a sale to edit from the invoice page to the sale screen (once). */
+@javax.inject.Singleton
+class PendingSaleEdit @Inject constructor() { @Volatile var id: Long? = null }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -56,7 +64,40 @@ class SaleViewModel @Inject constructor(
     private val products: ProductRepository,
     parties: PartyDao,
     settings: SettingsRepository,
+    transactionDao: ir.kalapod.app.data.local.dao.TransactionDao,
+    private val pendingEdit: PendingSaleEdit,
 ) : ViewModel() {
+    /** Sales history shown under the sale screen (newest first). */
+    val recentSales: StateFlow<List<ir.kalapod.app.data.local.dao.DocumentRow>> =
+        transactionDao.observeDocuments(ir.kalapod.app.data.local.entity.TransactionType.SALE, 200)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun consumePendingEdit() { pendingEdit.id?.let { pendingEdit.id = null; startEdit(it) } }
+
+    /** Loads a posted sale into the cart as it was entered. */
+    fun startEdit(id: Long) {
+        viewModelScope.launch {
+            val e = transactions.saleForEdit(id) ?: run { showError("این فاکتور قابل ویرایش نیست."); return@launch }
+            val cur = _state.value.currency
+            val lines = e.lines.mapNotNull { l -> products.get(l.productId)?.let { CartLine.of(it, l.unitPrice, cur, l.quantityMilli) } }
+            val credit = e.received < e.total
+            _state.value = SaleState(
+                currency = cur, lines = lines,
+                discountText = if (e.discount > 0) ir.kalapod.app.core.format.InputParser.moneyForEdit(e.discount, cur) else "",
+                customerText = e.customerName.orEmpty(), customerId = e.customerId,
+                settlement = when {
+                    credit -> Settlement.CREDIT
+                    e.receivedMethod == PaymentMethod.CARD -> Settlement.CARD
+                    else -> Settlement.CASH
+                },
+                receivedNowText = if (credit && e.received > 0) ir.kalapod.app.core.format.InputParser.moneyForEdit(e.received, cur) else "",
+                editingId = e.originalId, editingNumber = e.invoiceNumber, editingAt = e.occurredAt,
+            )
+        }
+    }
+
+    fun cancelEdit() = _state.update { SaleState(currency = it.currency) }
+
     private val _state = MutableStateFlow(SaleState())
     val state: StateFlow<SaleState> = _state.asStateFlow()
 
@@ -132,14 +173,14 @@ class SaleViewModel @Inject constructor(
         }
         _state.update { it.copy(posting = true, shortages = emptyList()) }
         viewModelScope.launch {
-            val r = transactions.postSale(
-                SaleDraft(
-                    clientUuid = s.clientUuid, lines = s.lines.flatMap { it.toInputs(s.currency)!! },
-                    discount = t.discount, customer = customer, receivedAmount = receivedNow(s, t),
-                    receivedMethod = if (s.settlement == Settlement.CARD) PaymentMethod.CARD else PaymentMethod.CASH,
-                    allowOversell = allowOversell,
-                ),
+            val draft = SaleDraft(
+                clientUuid = s.clientUuid, lines = s.lines.flatMap { it.toInputs(s.currency)!! },
+                discount = t.discount, customer = customer, receivedAmount = receivedNow(s, t),
+                receivedMethod = if (s.settlement == Settlement.CARD) PaymentMethod.CARD else PaymentMethod.CASH,
+                allowOversell = allowOversell,
+                occurredAt = s.editingAt ?: System.currentTimeMillis(),
             )
+            val r = if (s.editingId != null) transactions.correctSale(s.editingId, draft) else transactions.postSale(draft)
             _state.update {
                 when (r) {
                     is PostResult.Posted -> SaleState(currency = it.currency, lastPosted = r)
