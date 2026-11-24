@@ -22,7 +22,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Fill in links and version
         run: |
           VERSION="0.$(grep '^VERSION=' version.properties | cut -d= -f2 | tr -d '\r')"
@@ -31,7 +31,7 @@ jobs:
           FA_VERSION=$(echo "$VERSION" | sed 'y/0123456789./۰۱۲۳۴۵۶۷۸۹٫/')
           sed -i -e "s|__REPO_URL__|${REPO_URL}|g" -e "s|__APK_URL__|${APK_URL}|g" -e "s|__VERSION__|${FA_VERSION}|g" site/index.html
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: site
       - id: deployment
