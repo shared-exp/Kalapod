@@ -46,6 +46,7 @@ class InventoryLedger @Inject constructor(private val db: KalapodDatabase) {
             val (rest, out) = batch.issue(minOf(-b.remainingMilli, batch.quantityMilli), fallbackUnitCost = 0)
             insert(p.id, out, reason, transactionId, at, note, head)
             insert(p.id, StockPosition.Movement(-out.quantityDeltaMilli, -out.valueDelta), reason, transactionId, at, note, b.id)
+            settleOversell(b.id, p.id)
             batch = rest
         }
         refresh(p.id, at)
@@ -140,6 +141,42 @@ class InventoryLedger @Inject constructor(private val db: KalapodDatabase) {
             applyExact(productId, StockPosition.Movement(-own, -ownCost), MovementReason.PURCHASE_RETURN, txId, at, batchId = head)
         }
         if (qty > own) issue(productId, qty - own, MovementReason.PURCHASE_RETURN, txId, at)
+    }
+
+    /**
+     * Goods sold before they were recorded were costed at a guess (last purchase price, maybe 0). Once a
+     * purchase covers them, the batch is back at zero quantity but keeps the guess error as leftover value;
+     * that difference is moved onto the sales (and their invoice lines) that oversold, so their cost and
+     * profit become the real ones. Split over those sales by the quantity each oversold; exact to the rial.
+     */
+    private suspend fun settleOversell(batchId: Long, productId: Long) {
+        val dao = db.inventoryDao()
+        val moves = dao.inBatch(batchId)
+        if (moves.sumOf { it.quantityDeltaMilli } != 0L) return
+        val residual = moves.sumOf { it.valueDelta }
+        if (residual == 0L) return
+        // The part of each outgoing movement that took the batch below zero.
+        val over = mutableListOf<Pair<InventoryMovementEntity, Long>>()
+        var running = 0L
+        for (m in moves) {
+            val before = running
+            running += m.quantityDeltaMilli
+            if (m.quantityDeltaMilli < 0) {
+                val q = maxOf(0L, -running) - maxOf(0L, -before)
+                if (q > 0) over += m to q
+            }
+        }
+        val total = over.sumOf { it.second }
+        if (total == 0L) return
+        var left = residual
+        over.forEachIndexed { k, (m, q) ->
+            val part = if (k == over.lastIndex) left else Money.divRoundHalfUp(residual * q, total)
+            left -= part
+            dao.addValue(m.id, -part)
+            if (m.transactionId != null && m.reason == MovementReason.SALE) {
+                dao.lastItem(m.transactionId, productId)?.let { dao.addItemCost(it, part) }
+            }
+        }
     }
 
     /** Batches of a product, oldest first. */

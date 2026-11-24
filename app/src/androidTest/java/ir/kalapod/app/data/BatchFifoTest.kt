@@ -106,4 +106,53 @@ class BatchFifoTest {
             purchasePrice = p.lastPurchasePrice, minStockMilli = 0, leadTimeDays = 1, barcodes = emptyList()))
         assertEquals(listOf(Fifo.PriceTier(20_000, 10_500), Fifo.PriceTier(5_000, 11_000)), products.priceTiers(id, 25_000))
     }
+
+    private suspend fun consistent(pid: Long) {
+        val p = products.get(pid)!!
+        val b = ledger.batches(pid)
+        assertEquals("cache = ledger", p.stockValue, db.inventoryDao().valueFromLedger(pid))
+        assertEquals("batches add up", p.stockValue, b.sumOf { it.remainingValue })
+        assertEquals("empty batches hold no value", 0L, b.filter { it.remainingMilli == 0L }.sumOf { it.remainingValue })
+    }
+
+    @Test fun oversoldCostIsCorrectedByTheLaterPurchase() = runBlocking {
+        val sale = tx.postSale(SaleDraft("s1", listOf(LineInput(id, 27_000, 10_000)), receivedAmount = 270_000, allowOversell = true)) as PostResult.Posted
+        // 20 × 800 + 5 × 900 + 2 guessed at the last purchase price (900)
+        assertEquals(160_000L + 45_000L + 18_000L, db.transactionDao().items(sale.transactionId).single().costTotal)
+        tx.postPurchase(PurchaseDraft("p2", listOf(LineInput(id, 10_000, 9_500)), paidAmount = 95_000))
+        // the 2 missing units really cost 950 each
+        assertEquals(160_000L + 45_000L + 19_000L, db.transactionDao().items(sale.transactionId).single().costTotal)
+        assertEquals(8_000L, products.get(id)!!.stockMilli)
+        assertEquals(76_000L, products.get(id)!!.stockValue)
+        consistent(id)
+    }
+
+    @Test fun productSoldBeforeAnyPurchaseGetsItsCostLater() = runBlocking {
+        val z = (products.save(ProductDraft(name = "Zero", categoryId = null, unit = ProductUnit.PIECE, salePrice = 5_000,
+            purchasePrice = 0, minStockMilli = 0, leadTimeDays = 1, barcodes = emptyList())) as SaveResult.Saved).id
+        val s1 = tx.postSale(SaleDraft("z1", listOf(LineInput(z, 1_000, 5_000)), receivedAmount = 5_000, allowOversell = true)) as PostResult.Posted
+        val s2 = tx.postSale(SaleDraft("z2", listOf(LineInput(z, 2_000, 5_000)), receivedAmount = 10_000, allowOversell = true)) as PostResult.Posted
+        assertEquals(0L, db.transactionDao().items(s2.transactionId).single().costTotal)   // nothing known yet
+        // A small purchase covers only part of the shortage: nothing is settled yet.
+        tx.postPurchase(PurchaseDraft("zp1", listOf(LineInput(z, 1_000, 3_000)), paidAmount = 3_000))
+        assertEquals(-2_000L, products.get(z)!!.stockMilli)
+        // The next one covers the rest: both sales now carry real cost (1 × 3,000 + 2 × 4,000 in total).
+        tx.postPurchase(PurchaseDraft("zp2", listOf(LineInput(z, 5_000, 4_000)), paidAmount = 20_000))
+        val c1 = db.transactionDao().items(s1.transactionId).single().costTotal
+        val c2 = db.transactionDao().items(s2.transactionId).single().costTotal
+        assertEquals(11_000L, c1 + c2)
+        assertEquals(3_000L, products.get(z)!!.stockMilli)
+        assertEquals(12_000L, products.get(z)!!.stockValue)
+        consistent(z)
+    }
+
+    @Test fun reversingASettledOversellKeepsStockRight() = runBlocking {
+        val sale = tx.postSale(SaleDraft("s1", listOf(LineInput(id, 27_000, 10_000)), receivedAmount = 270_000, allowOversell = true)) as PostResult.Posted
+        tx.postPurchase(PurchaseDraft("p2", listOf(LineInput(id, 10_000, 9_500)), paidAmount = 95_000))
+        tx.reverse(sale.transactionId, "اشتباه")
+        val p = products.get(id)!!
+        assertEquals(35_000L, p.stockMilli)                          // 20 + 5 + 10
+        assertEquals(160_000L + 45_000L + 95_000L, p.stockValue)
+        consistent(id)
+    }
 }

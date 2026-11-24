@@ -114,6 +114,19 @@ interface InventoryDao {
     )
     suspend fun batches(productId: Long): List<BatchRow>
 
+    @Query("SELECT * FROM inventory_movements WHERE batchId = :batchId ORDER BY id")
+    suspend fun inBatch(batchId: Long): List<InventoryMovementEntity>
+
+    @Query("UPDATE inventory_movements SET valueDelta = valueDelta + :delta WHERE id = :id")
+    suspend fun addValue(id: Long, delta: Long)
+
+    /** Last line of a product in a document (the oversold part of a sale is its last FIFO piece). */
+    @Query("SELECT id FROM transaction_items WHERE transactionId = :txId AND productId = :productId ORDER BY id DESC LIMIT 1")
+    suspend fun lastItem(txId: Long, productId: Long): Long?
+
+    @Query("UPDATE transaction_items SET costTotal = costTotal + :delta WHERE id = :itemId")
+    suspend fun addItemCost(itemId: Long, delta: Long)
+
     @Query("UPDATE inventory_movements SET salePrice = :salePrice WHERE id = :batchId")
     suspend fun setBatchPrice(batchId: Long, salePrice: Long)
 }
