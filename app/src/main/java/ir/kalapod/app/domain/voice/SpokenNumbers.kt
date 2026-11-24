@@ -48,7 +48,8 @@ object SpokenNumbers {
                 t == "صد" && current in 1..9_000 -> { current *= 100; i++ }
                 // Number words join only with «و» or after a scale («دو هزار پونصد»); «هفتصد بیست تا …» is
                 // 700 and then 20 (the next item's quantity).
-                t in units && consumedAny && tokens[i - 1] != AND && tokens[i - 1] !in scales -> break
+                // «یه» right after a scale is the next item's article («۹۰ هزار یه روغن»), not «و یک».
+                t in units && consumedAny && tokens[i - 1] != AND && (tokens[i - 1] !in scales || t == "یه") -> break
                 t in units -> { current += units.getValue(t) * 1000L; consumedAny = true; i++ }
                 t in scales -> {
                     val s = scales.getValue(t)

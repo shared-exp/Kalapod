@@ -76,6 +76,8 @@ object VoiceCommandParser {
     /** Re-attaches suffixes that ZWNJ normalization splits ("دونه ای" → "دونهای") before tokenizing. */
     private fun joinSuffixes(text: String): String =
         PersianText.normalize(text).replace(Regex("(\\S+) ای(?=\\s|$)"), "$1ای").replace(Regex("(\\S+) اش(?=\\s|$)"), "$1اش")
+            // «دوتا», «سه‌تا», «۲تا» written as one word → «دو تا»
+            .replace(Regex("""(?<=^|\s)(یه|یک|دو|سه|چهار|چار|پنج|شش|شیش|هفت|هشت|نه|ده|\d+)‌?تا(?=\s|$)"""), "$1 تا")
 
     // ---------------- operation / payment ----------------
 
@@ -212,6 +214,13 @@ object VoiceCommandParser {
                             b.unitPrice = price.first
                             i = price.second
                         }
+                        // «یه روغن لادن یه پنیر صبا», «روغن لادن دو پنیر»: a small whole count followed by more
+                        // words after a named item starts the next item (sizes are big: ۲۵۰، ۷۰۰ — or fractional: ۱.۵).
+                        cur.name.isNotEmpty() && startsNextItem(num.milli, next) -> {
+                            flush()
+                            cur.qty = num.milli
+                            i = num.next
+                        }
                         // «۱۰ تا رب ۷۰۰ چین چین» = «۱۰ تا رب چین چین ۷۰۰»: once an item has its quantity, a bare
                         // number (no unit after it, not a price) belongs to the name. The next item starts at
                         // a number followed by a unit («۲۰ تا روغن …»), handled above.
@@ -235,6 +244,14 @@ object VoiceCommandParser {
         flush()
         return items.map { it.build() }.filter { it.name.isNotEmpty() || it.quantityMilli != null }
     }
+
+    /** A bare number that is a count of a new item, not a size: whole, at most [MAX_BARE_COUNT], and a name follows. */
+    private fun startsNextItem(milli: Long, next: String?): Boolean =
+        milli % 1000 == 0L && milli in 1_000..MAX_BARE_COUNT * 1000 && next != null && next != PersianText.COMMA &&
+            !SpokenNumbers.isNumberWord(next) && next !in fillers && next !in currencyWords && next !in pricePerWords &&
+            next !in priceMarkers && next !in totalMarkers && next != "و"
+
+    private const val MAX_BARE_COUNT = 20L
 
     /** Reads "N [هزار…] [تومان|ریال]" at [start] → (rial, nextIndex). Toman is the default. */
     private fun readPrice(t: List<String>, start: Int): Pair<Long, Int>? {

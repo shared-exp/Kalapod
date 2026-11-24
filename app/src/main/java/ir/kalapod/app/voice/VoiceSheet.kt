@@ -157,7 +157,7 @@ fun VoiceSheet(
                             label = { Text("آزمایشی: جمله را بنویسید") },
                             trailingIcon = { TextButton(onClick = { vm.process(typed) }) { Text("ارسال") } },
                         )
-                        listOf("یه رب چین چین فروختم", "۱۰ تا رب ۷۰۰ چین چین ۲۰ تا روغن لادن ۱.۵ فروختم", "ده تا رب گوجه ارنگی شین شین ۵۰۰ خریدم", "پنج کارتن نوشابه زمزم خریدم")
+                        listOf("یه روغن لادن یه پنیر صبا", "یه رب چین چین فروختم", "۱۰ تا رب ۷۰۰ چین چین ۲۰ تا روغن لادن ۱.۵ فروختم", "ده تا رب گوجه ارنگی شین شین ۵۰۰ خریدم", "پنج کارتن نوشابه زمزم خریدم")
                             .forEach { sample -> TextButton(onClick = { vm.process(sample) }) { Text(sample, style = MaterialTheme.typography.bodySmall) } }
                     }
                     Text("بعد از گفتن، روی دکمه بزنید", Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall)
